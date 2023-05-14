@@ -16,7 +16,7 @@ func main() {
 	addr := ":8080"
 	srv := server.NewServer(addr)
 	go func() {
-		// 后面一个是为啥
+		// 后面一个err是为啥
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("启动失败{%v}", err)
 		}

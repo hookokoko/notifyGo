@@ -2,63 +2,65 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/Shopify/sarama"
 )
 
-type Producer struct {
-	host []string
+// 这里写consumer的抽象方法，然后具体的消费逻辑写到engine.go里面，然后路由到sender中不同的处理方法里面
+/*
+	消费者在初始化的时候，应该加载一些配置文件，然后就是创建一个线程池，
+	消费的时候把对应的处理函数放到线程池中
+*/
+
+type Consumer struct {
+	host    []string
+	handler *ConsumerGroupHandler
 }
 
-func (p *Producer) Send(topic string, data []byte) {
+func NewConsumer(host []string) *Consumer {
+	return &Consumer{
+		host:    host,
+		handler: NewConsumerHandler(), // 这里构造消息处理handler，后续可以考虑plugin，进行热加载
+	}
+}
+
+func (c *Consumer) ConsumerGroup(topic, group, name string) {
 	config := sarama.NewConfig()
-	// 异步生产者不建议把 Errors 和 Successes 都开启，一般开启 Errors 就行
-	// 同步生产者就必须都开启，因为会同步返回发送成功或者失败
-	config.Producer.Return.Errors = true    // 设定是否需要返回错误信息
-	config.Producer.Return.Successes = true // 设定是否需要返回成功信息
-	producer, err := sarama.NewAsyncProducer(p.host, config)
+	config.Consumer.Return.Errors = true
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cg, err := sarama.NewConsumerGroup(c.host, group, config)
 	if err != nil {
-		log.Fatal("NewSyncProducer err:", err)
+		log.Fatal("NewConsumerGroup err: ", err)
 	}
-	var (
-		wg                                   sync.WaitGroup
-		enqueued, timeout, successes, errors int
-	)
-	// [!important] 异步生产者发送后必须把返回值从 Errors 或者 Successes 中读出来 不然会阻塞 sarama 内部处理逻辑 导致只能发出去一条消息
+	defer cg.Close()
+
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for range producer.Successes() {
-			// log.Printf("[Producer] Success: key:%v msg:%+v \n", s.Key, s.Value)
-			successes++
+		for {
+			fmt.Println("running: ", name)
+			/*
+				![important]
+				应该在一个无限循环中不停地调用 Consume()
+				因为每次 Rebalance 后需要再次执行 Consume() 来恢复连接
+				Consume 开始才发起 Join Group 请求 如果当前消费者加入后成为了 消费者组 leader,则还会进行 Rebalance 过程，从新分配
+				组内每个消费组需要消费的 topic 和 partition，最后 Sync Group 后才开始消费
+				具体信息见 https://github.com/lixd/kafka-go-example/issues/4
+			*/
+			err = cg.Consume(ctx, []string{topic}, c.handler)
+			if err != nil {
+				log.Println("Consume err: ", err)
+			}
+			// 如果 context 被 cancel 了，那么退出
+			if ctx.Err() != nil {
+				return
+			}
 		}
 	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for e := range producer.Errors() {
-			log.Printf("[Producer] Errors：err:%v msg:%+v \n", e.Msg, e.Err)
-			errors++
-		}
-	}()
-	msg := &sarama.ProducerMessage{Topic: topic, Key: nil, Value: sarama.ByteEncoder(data)}
-	// 异步发送只是写入内存了就返回了，并没有真正发送出去
-	// sarama 库中用的是一个 channel 来接收，后台 goroutine 异步从该 channel 中取出消息并真正发送
-	// select + ctx 做超时控制,防止阻塞 producer.Input() <- msg 也可能会阻塞
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
-	select {
-	case producer.Input() <- msg:
-		enqueued++
-	case <-ctx.Done():
-		timeout++
-	}
-	cancel()
-
-	producer.AsyncClose()
 	wg.Wait()
-	log.Printf("发送完毕 enqueued:%d timeout:%d successes: %d errors: %d\n", enqueued, timeout, successes, errors)
 }

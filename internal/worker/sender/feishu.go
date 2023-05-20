@@ -15,6 +15,6 @@ func (fh *FeishuHandler) Name() string {
 	return internal.FEISHU
 }
 
-func (fh *FeishuHandler) Execute(ctx context.Context, task *internal.TaskInfo) error {
+func (fh *FeishuHandler) Execute(ctx context.Context, task *internal.Task) error {
 	return nil
 }

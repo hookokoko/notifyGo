@@ -8,7 +8,7 @@ import (
 
 type IHandler interface {
 	Name() string
-	Execute(ctx context.Context, taskInfo *internal.TaskInfo) error
+	Execute(ctx context.Context, taskInfo *internal.Task) error
 	//Allow(ctx context.Context, taskInfo *TaskInfo) bool
 }
 

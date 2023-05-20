@@ -1,9 +1,9 @@
 package handler
 
 import (
+	"context"
 	"net/http"
-	"notifyGo/internal"
-	"notifyGo/internal/engine/process"
+	"notifyGo/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,22 +14,15 @@ func NewPushHandler() *PushHandler {
 	return &PushHandler{}
 }
 
-func (p *PushHandler) Send(ctx *gin.Context) {
-	task := internal.TaskInfo{
-		SendChannel:     "email",
-		MessageContent:  "happyhappyhappy",
-		MessageReceiver: "chenhaokun",
-	}
+func (p *PushHandler) SendBatch(ctx *gin.Context) {
+	ctx.JSON(http.StatusOK, "send batch")
+}
 
-	proc := process.NewMsgSendProcess()
-	err := proc.Process(ctx, task, 0)
+func (p *PushHandler) Send(ctx *gin.Context) {
+	c := service.NewCore()
+	err := c.Send(context.TODO(), "email", 123456, 123456, map[string]interface{}{})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, "消息处理处理失败")
 	}
-
-	ctx.JSON(http.StatusOK, "send")
-}
-
-func (p *PushHandler) SendBatch(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, "send batch")
+	ctx.JSON(http.StatusOK, "send ok")
 }

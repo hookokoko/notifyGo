@@ -1,4 +1,4 @@
-package engine
+package mq
 
 import (
 	"context"
@@ -13,9 +13,9 @@ type Producer struct {
 	host []string
 }
 
-func NewProducer(host []string) *Producer {
+func NewProducer(cfg Config) *Producer {
 	return &Producer{
-		host: host,
+		host: cfg.host,
 	}
 }
 

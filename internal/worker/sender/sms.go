@@ -15,6 +15,6 @@ func (fh *SmsHandler) Name() string {
 	return internal.SMS
 }
 
-func (fh *SmsHandler) Execute(ctx context.Context, task *internal.TaskInfo) error {
+func (fh *SmsHandler) Execute(ctx context.Context, task *internal.Task) error {
 	return nil
 }

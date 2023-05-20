@@ -16,7 +16,7 @@ func (eh *EmailHandler) Name() string {
 	return internal.EMAIL
 }
 
-func (eh *EmailHandler) Execute(ctx context.Context, task *internal.TaskInfo) error {
+func (eh *EmailHandler) Execute(ctx context.Context, task *internal.Task) error {
 	fmt.Printf("send email success, %v\n", *task)
 	return nil
 }

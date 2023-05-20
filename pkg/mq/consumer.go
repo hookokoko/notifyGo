@@ -1,4 +1,4 @@
-package engine
+package mq
 
 import (
 	"context"
@@ -15,35 +15,38 @@ import (
 	消费的时候把对应的处理函数放到线程池中
 */
 
-type Consumer struct {
+type ConsumerGroup struct {
 	host    []string
-	handler *ConsumerGroupHandler
+	handler sarama.ConsumerGroupHandler
+	sCg     sarama.ConsumerGroup
 }
 
-func NewConsumer(host []string) *Consumer {
-	return &Consumer{
-		host:    host,
-		handler: NewConsumerHandler(), // 这里构造消息处理handler，后续可以考虑plugin，进行热加载
-	}
-}
-
-func (c *Consumer) ConsumerGroup(topic, group, name string) {
-	config := sarama.NewConfig()
-	config.Consumer.Return.Errors = true
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	cg, err := sarama.NewConsumerGroup(c.host, group, config)
+func NewConsumerGroup(cfg Config, groupId string, handler sarama.ConsumerGroupHandler) *ConsumerGroup {
+	sCfg := sarama.NewConfig()
+	sCfg.Consumer.Return.Errors = true
+	cg, err := sarama.NewConsumerGroup(cfg.host, groupId, sCfg)
 	if err != nil {
 		log.Fatal("NewConsumerGroup err: ", err)
 	}
-	defer cg.Close()
+
+	return &ConsumerGroup{
+		host:    cfg.host,
+		handler: handler,
+		sCg:     cg,
+	}
+}
+
+func (c *ConsumerGroup) Start(topics []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer c.sCg.Close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for {
-			fmt.Println("running: ", name)
+			fmt.Println("running: ", topics)
 			/*
 				![important]
 				应该在一个无限循环中不停地调用 Consume()
@@ -52,7 +55,7 @@ func (c *Consumer) ConsumerGroup(topic, group, name string) {
 				组内每个消费组需要消费的 topic 和 partition，最后 Sync Group 后才开始消费
 				具体信息见 https://github.com/lixd/kafka-go-example/issues/4
 			*/
-			err = cg.Consume(ctx, []string{topic}, c.handler)
+			err := c.sCg.Consume(ctx, topics, c.handler)
 			if err != nil {
 				log.Println("Consume err: ", err)
 			}

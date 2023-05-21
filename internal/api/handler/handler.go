@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"notifyGo/internal"
 	"notifyGo/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,12 @@ func (p *PushHandler) SendBatch(ctx *gin.Context) {
 
 func (p *PushHandler) Send(ctx *gin.Context) {
 	c := service.NewCore()
-	err := c.Send(context.TODO(), "email", 123456, 123456, map[string]interface{}{})
+	err := c.Send(context.TODO(),
+		"email",
+		internal.Target{Email: "ch_haokun@163.com"},
+		123456,
+		map[string]interface{}{},
+	)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, "消息处理处理失败")
 	}

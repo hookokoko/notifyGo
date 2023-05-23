@@ -22,7 +22,7 @@ func (m *MsgPusher) GetRouter() *gin.Engine {
 	//g.Use()
 
 	// 发送消息
-	g.POST("send", m.PushHandler.SendNew)
+	g.POST("send", m.PushHandler.Send)
 	g.POST("sendBatch", m.PushHandler.SendBatch)
 
 	// 查看消息记录

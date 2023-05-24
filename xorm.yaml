@@ -1,0 +1,9 @@
+kind: reverse
+name: notify_db
+source:
+  database: mysql
+  conn_str: 'root:@/notify_go?charset=utf8'
+targets:
+  - type: codes
+    language: golang
+    output_dir: ./internal/model

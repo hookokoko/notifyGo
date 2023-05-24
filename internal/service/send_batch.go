@@ -21,6 +21,8 @@ func NewSendBatchService() *SendBatchService {
 func (ss *SendBatchService) Process(_ context.Context, tasks []internal.Task) error {
 	// 发送消息
 	// 这里如果是100w条消息，内存会炸吧？
+	// 所以这里进行流式接收、流式处理
+	// 这里还会写入db
 	for _, task := range tasks {
 		taskBytes, err := json.Marshal(task)
 		if err != nil {

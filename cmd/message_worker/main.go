@@ -23,3 +23,21 @@ func main() {
 	// 这里面表示消费哪些topic消息
 	cg.Start([]string{"email"})
 }
+
+func startEmail(hm *sender.HandleManager, pool *worker.PoolExecutor, cfg mq.Config) {
+	handler := worker.NewConsumerHandler(hm, pool)
+	cg1 := mq.NewConsumerGroup(cfg, "email.notice", handler)
+	cg1.Start([]string{"notify_go_common"})
+
+	cg2 := mq.NewConsumerGroup(cfg, "email.market", handler)
+	cg2.Start([]string{"notify_go_common"})
+}
+
+func startSMS(hm *sender.HandleManager, pool *worker.PoolExecutor, cfg mq.Config) {
+	handler := worker.NewConsumerHandler(hm, pool)
+	cg1 := mq.NewConsumerGroup(cfg, "sms.notice", handler)
+	cg1.Start([]string{"notify_go_common"})
+
+	cg2 := mq.NewConsumerGroup(cfg, "sms.market", handler)
+	cg2.Start([]string{"notify_go_common"})
+}

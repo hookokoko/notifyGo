@@ -24,7 +24,7 @@ func (p *PushHandler) Send(ctx *gin.Context) {
 	err := c.Send(context.TODO(),
 		"email",
 		internal.Target{Email: "ch_haokun@163.com"},
-		123456,
+		123,
 		map[string]interface{}{},
 	)
 	if err != nil {

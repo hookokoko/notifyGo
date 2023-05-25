@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"notifyGo/internal"
 	"notifyGo/internal/model"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // 请求target服务，获取发送目标
@@ -58,25 +61,34 @@ func (c *Core) Send(ctx context.Context, channel string, target internal.ITarget
 func (c *Core) SentBatch(ctx context.Context, channel string, targetId, templateId int64,
 	variable map[string]interface{}) error {
 
-	// 获取发送目标
+	// 获取发送目标, 这个相当于一个服务，支持分页获取
+	// 或者流式获取发送目标，流式构造发送内容
 	receivers := c.TargetService.GetTarget(targetId)
 
 	batchTask := make([]internal.Task, 0, len(receivers))
-	for _, r := range receivers {
+
+	var eg errgroup.Group
+	for _, recvr := range receivers {
 		// 针对每一个发送目标 构建发送内容
 		// 可以考虑这个加一个缓存
 		// 还应该使用到goroutine池，并发获取并发送
 		// 获取内容后修改target表状态为 待发送 ，并写入content
-		msgContent := c.ContentService.GetContent(r, templateId, variable)
-		batchTask = append(batchTask, internal.Task{
-			MsgId:       0,
-			SendChannel: channel,
-			MsgContent:  msgContent,
-			MsgReceiver: r,
+		eg.Go(func() error {
+			msgContent := c.ContentService.GetContent(recvr, templateId, variable)
+			batchTask = append(batchTask, internal.Task{
+				//MsgId:       0,
+				SendChannel: channel,
+				MsgContent:  msgContent,
+				MsgReceiver: recvr,
+			})
+			// 这里的error可以加工一下带上这次执行的标识信息
+			return c.SendBatchService.Process(ctx, batchTask)
 		})
 	}
-
-	return c.SendBatchService.Process(ctx, batchTask)
+	if err := eg.Wait(); err != nil {
+		fmt.Printf("get error:%v\n", err)
+	}
+	return nil
 }
 
 func (c *Core) SentBox() {

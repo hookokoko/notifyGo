@@ -13,6 +13,7 @@ type notifyGoDAO struct {
 	engine *xorm.Engine
 }
 
+// 之所以设计成返回接口的只有一个原因 就是不想暴露结构体
 func NewINotifyGoDAO() INotifyGoDAO {
 	engine, err := xorm.NewEngine("mysql", "root:@/notify_go?charset=utf8")
 	if err != nil {

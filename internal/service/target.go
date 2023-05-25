@@ -8,10 +8,11 @@ func NewTargetService() *TargetService {
 	return &TargetService{}
 }
 
-func (ts *TargetService) GetTarget(targetId int64) []internal.Target {
-	targets := []internal.Target{
-		{UserId: 1111, Email: "ch_haokun@163.com", Phone: "+8613132281931"},
-		{UserId: 1112, Email: "hookokoko@126.com", Phone: "+8618800187095"},
+func (ts *TargetService) GetTarget(targetId int64) []internal.ITarget {
+	targets := []internal.ITarget{
+		internal.IdTarget{"111"},
+		internal.EmailTarget{"ch_hakun@163.com"},
+		internal.PhoneTarget{"+8618800187099"},
 	}
 	return targets
 }

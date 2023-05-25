@@ -1,22 +1,105 @@
 package model
 
 import (
+	"context"
+	"notifyGo/internal"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"xorm.io/xorm"
 )
 
-type NotifyGoDAO struct {
-	*xorm.Engine
+type notifyGoDAO struct {
+	engine *xorm.Engine
 }
 
-func NewNotifyGoDAO() *NotifyGoDAO {
+func NewINotifyGoDAO() INotifyGoDAO {
 	engine, err := xorm.NewEngine("mysql", "root:@/notify_go?charset=utf8")
 	if err != nil {
 		return nil
 	}
-	return &NotifyGoDAO{Engine: engine}
+	return &notifyGoDAO{engine}
+}
+
+func NewITemplateDAO() ITemplateDAO {
+	engine, err := xorm.NewEngine("mysql", "root:@/notify_go?charset=utf8")
+	if err != nil {
+		return nil
+	}
+	return &notifyGoDAO{engine}
+}
+
+type INotifyGoDAO interface {
+	InsertRecord(ctx context.Context, templateId int64, target internal.ITarget, msgContent string) error
+}
+
+type ITemplateDAO interface {
+	GetContent(templateId int64, country string) (string, error)
+}
+
+func (n *notifyGoDAO) InsertRecord(ctx context.Context, templateId int64, target internal.ITarget,
+	msgContent string) error {
+	sess := n.engine.NewSession()
+	defer sess.Close()
+
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+
+	// 一些字段要封装到参数里了
+	delivery := Delivery{
+		TemplateId:  templateId,
+		Status:      1, // 消息创建状态
+		SendChannel: 40,
+		MsgType:     20,
+		Proposer:    "crm",
+		Creator:     "chenhaokun",
+		Updator:     "chenhaokun",
+		IsDelted:    0,
+		Created:     time.Now(),
+		Updated:     time.Now(),
+	}
+
+	// 这里配置好struct的id自增tag，会自动赋值插入的id
+	if _, err := n.engine.Insert(&delivery); err != nil {
+		return err
+	}
+
+	tgt := Target{
+		TargetIdType: target.Type(), // 邮箱，这里封装一个枚举，需要根据 name(target.Email) -> value
+		TargetId:     target.Value(),
+		DeliveryId:   delivery.Id,
+		Status:       1, // 创建状态
+		MsgContent:   msgContent,
+	}
+	if _, err := n.engine.Insert(&tgt); err != nil {
+		return err
+	}
+
+	return sess.Commit()
+}
+
+func (n *notifyGoDAO) GetContent(templateId int64, country string) (string, error) {
+	// get 语言 by target
+	// mock下查看对应target所在的国家
+	tpl := Template{}
+	has, err := n.engine.Where("id = ?", templateId).Get(&tpl)
+	if err != nil || !has {
+		return "", err
+	}
+	return tpl.ChsContent, nil
+}
+
+func (Delivery) TableName() string {
+	return "delivery"
+}
+
+func (Target) TableName() string {
+	return "target"
+}
+
+func (Template) TableName() string {
+	return "template"
 }
 
 type Delivery struct {

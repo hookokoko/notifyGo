@@ -12,7 +12,7 @@ func NewFeishuHandler() *FeishuHandler {
 }
 
 func (fh *FeishuHandler) Name() string {
-	return internal.FEISHU
+	return internal.FEISHUNAME
 }
 
 func (fh *FeishuHandler) Execute(ctx context.Context, task *internal.Task) error {

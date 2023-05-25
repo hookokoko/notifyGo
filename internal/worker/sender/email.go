@@ -13,7 +13,7 @@ func NewEmailHandler() *EmailHandler {
 }
 
 func (eh *EmailHandler) Name() string {
-	return internal.EMAIL
+	return internal.EMAILNAME
 }
 
 func (eh *EmailHandler) Execute(ctx context.Context, task *internal.Task) error {

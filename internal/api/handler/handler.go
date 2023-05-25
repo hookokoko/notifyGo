@@ -23,7 +23,7 @@ func (p *PushHandler) Send(ctx *gin.Context) {
 	c := service.NewCore()
 	err := c.Send(context.TODO(),
 		"email",
-		internal.Target{Email: "ch_haokun@163.com"},
+		internal.EmailTarget{Email: "ch_haokun@163.com"},
 		123,
 		map[string]interface{}{},
 	)

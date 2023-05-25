@@ -4,7 +4,6 @@ import (
 	"context"
 	"notifyGo/internal"
 	"notifyGo/internal/model"
-	"time"
 )
 
 // 请求target服务，获取发送目标
@@ -16,7 +15,7 @@ type Core struct {
 	TargetService    *TargetService
 	SendService      *SendService
 	SendBatchService *SendBatchService
-	NotifyGoDAO      *model.NotifyGoDAO
+	NotifyGoDAO      model.INotifyGoDAO
 }
 
 func NewCore() *Core {
@@ -26,52 +25,25 @@ func NewCore() *Core {
 		SendService:      NewSendService(),
 		SendBatchService: NewSendBatchService(),
 		// 这里是否需要自己管理连接池
-		NotifyGoDAO: model.NewNotifyGoDAO(),
+		NotifyGoDAO: model.NewINotifyGoDAO(),
 	}
 }
 
 // 1. 创建一个delivery记录
-// 2. 获取所有的target，并创建target记录关联delivery id
+// 2. 创建一个target，并关联delivery id
 // 3. 推送至kafka
-func (c *Core) Send(ctx context.Context, channel string, target internal.Target, templateId int64,
+func (c *Core) Send(ctx context.Context, channel string, target internal.ITarget, templateId int64,
 	variable map[string]interface{}) error {
 	// 获取发送内容
 	msgContent := c.ContentService.GetContent(target, templateId, variable)
 
-	// 在DAO层封装事务，target和delivery表
-	delivery := model.Delivery{
-		TemplateId:  templateId,
-		Status:      1, // 消息创建状态
-		SendChannel: 40,
-		MsgType:     20,
-		Proposer:    "crm",
-		Creator:     "chenhaokun",
-		Updator:     "chenhaokun",
-		IsDelted:    0,
-		Created:     time.Now(),
-		Updated:     time.Now(),
-	}
-
-	// 这里如何获取插入的id
-	_, err := c.NotifyGoDAO.Insert(&delivery)
-	if err != nil {
-		return err
-	}
-
-	tgt := model.Target{
-		TargetIdType: 10, // 邮箱，这里封装一个枚举，需要根据 name(target.Email) -> value
-		TargetId:     target.Email,
-		DeliveryId:   delivery.Id,
-		Status:       1, // 创建状态
-		MsgContent:   msgContent,
-	}
-	_, err = c.NotifyGoDAO.InsertOne(&tgt)
+	err := c.NotifyGoDAO.InsertRecord(ctx, templateId, target, msgContent)
 	if err != nil {
 		return err
 	}
 
 	task := internal.Task{
-		MsgId:       delivery.Id,
+		//MsgId:       delivery.Id, // 这里考虑手动生成，现在先不传
 		SendChannel: channel,
 		MsgContent:  msgContent,
 		MsgReceiver: target,

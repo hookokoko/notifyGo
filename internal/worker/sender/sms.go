@@ -12,7 +12,7 @@ func NewSmsHandler() *SmsHandler {
 }
 
 func (fh *SmsHandler) Name() string {
-	return internal.SMS
+	return internal.SMSNAME
 }
 
 func (fh *SmsHandler) Execute(ctx context.Context, task *internal.Task) error {

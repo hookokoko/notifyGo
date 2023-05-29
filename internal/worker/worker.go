@@ -35,6 +35,7 @@ func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, cl
 	for msg := range claim.Messages() {
 		log.Printf("[consumer] name:%s topic:%q partition:%d offset:%d\n", h.name, msg.Topic, msg.Partition, msg.Offset)
 		// 1. 这里将msg序列化，获取消息类型
+		// task.ITarget是接口类型，该如何序列化
 		taskInfo := new(internal.Task)
 		err := json.Unmarshal(msg.Value, taskInfo)
 		if err != nil {

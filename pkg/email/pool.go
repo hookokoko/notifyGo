@@ -42,6 +42,17 @@ type Stats struct {
 type Client struct {
 	*smtp.Client
 	failCount int
+	createdAt time.Time
+	usedAt    int64
+}
+
+func (cn *Client) UsedAt() time.Time {
+	unix := atomic.LoadInt64(&cn.usedAt)
+	return time.Unix(unix, 0)
+}
+
+func (cn *Client) SetUsedAt(tm time.Time) {
+	atomic.StoreInt64(&cn.usedAt, tm.Unix())
 }
 
 type Pool struct {
@@ -49,6 +60,8 @@ type Pool struct {
 	helloHostname string
 	tlsConfig     *tls.Config
 	auth          smtp.Auth
+
+	timers sync.Pool
 
 	cfg   *Options
 	queue chan struct{}
@@ -80,6 +93,15 @@ func NewPool(addr string, auth smtp.Auth, opt *Options) *Pool {
 		auth: auth,
 		cfg:  opt,
 
+		// 创建一个定时器，为Get 等待空闲连接时使用
+		timers: sync.Pool{
+			New: func() interface{} {
+				t := time.NewTimer(time.Hour)
+				t.Stop()
+				return t
+			},
+		},
+
 		queue:     make(chan struct{}, opt.PoolSize),
 		conns:     make([]*Client, 0, opt.PoolSize),
 		idleConns: make([]*Client, 0, opt.PoolSize),
@@ -98,6 +120,7 @@ func NewPool(addr string, auth smtp.Auth, opt *Options) *Pool {
 	return p
 }
 
+// 疯狂检测连接池空闲连接数量和连接池中的连接数量，不满足就创建
 func (p *Pool) checkMinIdleConns() {
 	if p.cfg.MinIdleConns == 0 {
 		return
@@ -107,7 +130,6 @@ func (p *Pool) checkMinIdleConns() {
 		case p.queue <- struct{}{}:
 			p.poolSize++
 			p.idleConnsLen++
-
 			go func() {
 				err := p.addIdleConn()
 				if err != nil && err != ErrClosed {
@@ -119,7 +141,6 @@ func (p *Pool) checkMinIdleConns() {
 				}
 				<-p.queue // freeTurn()
 			}()
-
 		default: // 这里意味着p.queue满了，不要阻塞，直接return
 			return
 		}
@@ -158,7 +179,8 @@ func (p *Pool) build(ctx context.Context) (*Client, error) {
 		cl.Hello(p.helloHostname)
 	}
 
-	c := &Client{cl, 0}
+	c := &Client{Client: cl, createdAt: time.Now()}
+	c.SetUsedAt(time.Now())
 
 	if _, err := startTLS(c, p.tlsConfig); err != nil {
 		c.Close()
@@ -203,8 +225,122 @@ func (p *Pool) closed() bool {
 	return atomic.LoadUint32(&p._closed) == 1
 }
 
-func (p *Pool) Get() *Client {
-	return nil
+func (p *Pool) Get(ctx context.Context) (*Client, error) {
+	if p.closed() {
+		return nil, ErrClosed
+	}
+
+	if err := p.waitTurn(ctx); err != nil {
+		return nil, err
+	}
+
+	for {
+		p.connsMu.Lock()
+		// 尝试p.idleConns中拿到一个连接
+		cn, err := p.popIdle()
+		p.connsMu.Unlock()
+
+		if err != nil {
+			return nil, err
+		}
+		// 没有取到连接，终止循环，在下面的逻辑中新建一个连接
+		if cn == nil {
+			break
+		}
+		// 检查连接是否有效，如果无效就关闭它，继续下一轮循环
+		// 这里会不会有效率问题
+		if !p.isHealthyConn(cn) {
+			_ = p.CloseConn(cn)
+			continue
+		}
+
+		// 当拿到一个健康的可用连接，就增减Hits计数
+		atomic.AddUint32(&p.stats.Hits, 1)
+		return cn, nil
+	}
+
+	atomic.AddUint32(&p.stats.Misses, 1)
+
+	newClient, err := p.build(ctx)
+	// 如果获取连接失败，则重新腾出p.queue的一个位置
+	// 这里的p.queue中的位置是在waitTurn()中占用的
+	if err != nil {
+		<-p.queue
+		return nil, err
+	}
+
+	return newClient, nil
+}
+
+func (p *Pool) waitTurn(ctx context.Context) error {
+	// queue可以认为是一个大小为pool size的token池，当这个chan还能写入则return
+	select {
+	case p.queue <- struct{}{}:
+		return nil
+	default:
+	}
+
+	timer := p.timers.Get().(*time.Timer)
+	timer.Reset(p.cfg.PoolTimeout)
+
+	select {
+	case <-ctx.Done():
+		if !timer.Stop() {
+			<-timer.C
+		}
+		p.timers.Put(timer)
+		return ctx.Err()
+	case p.queue <- struct{}{}:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		p.timers.Put(timer)
+		return nil
+	// 等待超时
+	case <-timer.C:
+		p.timers.Put(timer)
+		atomic.AddUint32(&p.stats.Timeouts, 1)
+		return ErrPoolTimeout
+	}
+}
+
+func (p *Pool) popIdle() (*Client, error) {
+	if p.closed() {
+		return nil, ErrClosed
+	}
+	n := len(p.idleConns)
+	if n == 0 {
+		return nil, nil
+	}
+
+	idx := n - 1
+	cn := p.idleConns[idx]
+	p.idleConns = p.idleConns[:idx]
+
+	p.idleConnsLen--
+	p.checkMinIdleConns()
+
+	return cn, nil
+}
+
+func (p *Pool) isHealthyConn(client *Client) bool {
+	now := time.Now()
+
+	if p.cfg.ConnMaxLifetime > 0 && now.Sub(client.createdAt) >= p.cfg.ConnMaxLifetime {
+		return false
+	}
+	if p.cfg.ConnMaxIdleTime > 0 && now.Sub(client.UsedAt()) >= p.cfg.ConnMaxIdleTime {
+		return false
+	}
+
+	// 这里还没有仔细思考 针对email的检查
+	//if connCheck(cn.netConn) != nil {
+	//	return false
+	//}
+
+	client.SetUsedAt(now)
+
+	return true
 }
 
 func (p *Pool) Put() error {
@@ -235,4 +371,8 @@ func (p *Pool) IdleLen() int {
 	n := p.idleConnsLen
 	p.connsMu.Unlock()
 	return n
+}
+
+func (p *Pool) CloseConn(client *Client) error {
+	return client.Close()
 }

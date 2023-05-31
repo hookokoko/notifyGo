@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"log"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"sync"
 	"sync/atomic"
@@ -125,6 +127,7 @@ func (p *Pool) checkMinIdleConns() {
 	if p.cfg.MinIdleConns == 0 {
 		return
 	}
+	// 初始创建pool时，最多创建idleConnsLen个连接
 	for p.poolSize < p.cfg.PoolSize && p.idleConnsLen < p.cfg.MinIdleConns {
 		select {
 		case p.queue <- struct{}{}:
@@ -162,12 +165,20 @@ func (p *Pool) addIdleConn() error {
 		return ErrClosed
 	}
 
-	p.conns = append(p.conns, cn)
+	//p.conns = append(p.conns, cn)
 	p.idleConns = append(p.idleConns, cn)
 	return nil
 }
 
 func (p *Pool) build(ctx context.Context) (*Client, error) {
+	p.connsMu.Lock()
+	defer p.connsMu.Unlock()
+
+	// If pool is full remove the cn on next Put.
+	if p.poolSize >= p.cfg.PoolSize {
+		return nil, fmt.Errorf("连接池已满")
+	}
+
 	// 要不要加连接超时
 	cl, err := smtp.Dial(p.addr)
 	if err != nil {
@@ -193,6 +204,15 @@ func (p *Pool) build(ctx context.Context) (*Client, error) {
 			return nil, err
 		}
 	}
+
+	// It is not allowed to add new connections to the closed connection pool.
+	if p.closed() {
+		_ = c.Close()
+		return nil, ErrClosed
+	}
+
+	p.poolSize++
+	p.conns = append(p.conns, c)
 
 	return c, nil
 }
@@ -334,17 +354,53 @@ func (p *Pool) isHealthyConn(client *Client) bool {
 	}
 
 	// 这里还没有仔细思考 针对email的检查
-	//if connCheck(cn.netConn) != nil {
-	//	return false
-	//}
+	// 暂时还不确定这个函数是否符合要求
+	if err := client.Noop(); err != nil {
+		return false
+	}
 
 	client.SetUsedAt(now)
 
 	return true
 }
 
-func (p *Pool) Put() error {
+func (p *Pool) Put(c *Client) error {
+	p.connsMu.Lock()
+	// 如果MaxIdleConns设置为0，标识无限空闲连接数？
+	if p.cfg.MaxIdleConns == 0 || p.idleConnsLen < p.cfg.MaxIdleConns {
+		err := c.Reset()
+		// 重置失败，直接关闭
+		if err != nil {
+			_ = c.Close()
+			p.connsMu.Unlock()
+			return err
+		}
+		p.idleConns = append(p.idleConns, c)
+		p.idleConnsLen++
+	} else {
+		p.removeConn(c)
+	}
+
+	p.connsMu.Unlock()
+
+	// freeTurn()
+	<-p.queue
 	return nil
+}
+
+func (p *Pool) removeConn(client *Client) {
+	for i, c := range p.conns {
+		if c == client {
+			p.conns = append(p.conns[:i], p.conns[i+1:]...)
+			p.poolSize--
+			p.checkMinIdleConns()
+			break
+		}
+	}
+	// 关闭移除的连接
+	_ = client.Close()
+
+	atomic.AddUint32(&p.stats.StaleConns, 1)
 }
 
 func (p *Pool) Stats() *Stats {
@@ -375,4 +431,81 @@ func (p *Pool) IdleLen() int {
 
 func (p *Pool) CloseConn(client *Client) error {
 	return client.Close()
+}
+
+func (p *Pool) SendMail(ctx context.Context, e *Email) error {
+	c, err := p.Get(ctx)
+	if c == nil || err != nil {
+		return fmt.Errorf("Err: 获取邮件客户端连接失败: %v", err)
+	}
+	defer func() { _ = p.Put(c) }()
+
+	return c.sendMail(ctx, e)
+}
+
+func (c *Client) sendMail(ctx context.Context, e *Email) error {
+
+	recipients, err := addressLists(e.To, e.Cc, e.Bcc)
+	if err != nil {
+		return err
+	}
+
+	msg, err := e.Bytes()
+	if err != nil {
+		return err
+	}
+
+	from, err := emailOnly(e.From)
+	if err != nil {
+		return err
+	}
+	if err = c.Mail(from); err != nil {
+		return err
+	}
+
+	for _, recip := range recipients {
+		if err = c.Rcpt(recip); err != nil {
+			return err
+		}
+	}
+
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err = w.Write(msg); err != nil {
+		return err
+	}
+
+	err = w.Close()
+
+	return err
+}
+
+func emailOnly(full string) (string, error) {
+	addr, err := mail.ParseAddress(full)
+	if err != nil {
+		return "", err
+	}
+	return addr.Address, nil
+}
+
+func addressLists(lists ...[]string) ([]string, error) {
+	length := 0
+	for _, lst := range lists {
+		length += len(lst)
+	}
+	combined := make([]string, 0, length)
+
+	for _, lst := range lists {
+		for _, full := range lst {
+			addr, err := emailOnly(full)
+			if err != nil {
+				return nil, err
+			}
+			combined = append(combined, addr)
+		}
+	}
+
+	return combined, nil
 }

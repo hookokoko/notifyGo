@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"fmt"
 	"net/smtp"
 	"sync"
 	"testing"
@@ -174,30 +175,51 @@ func TestPool_Get(t *testing.T) {
 
 func TestPool(t *testing.T) {
 	opt := Options{
-		PoolSize:        0,
-		PoolTimeout:     0,
-		MinIdleConns:    0,
-		MaxIdleConns:    0,
-		ConnMaxIdleTime: 0,
-		ConnMaxLifetime: 0,
+		PoolSize:     100,
+		PoolTimeout:  40 * time.Second,
+		MinIdleConns: 3,
+		//MaxIdleConns:    0,
+		//ConnMaxIdleTime: 0,
+		//ConnMaxLifetime: 0,
 	}
+
+	client := NewClient(&ClientConfig{
+		addr: "smtp.qq.com:25",
+		auth: smtp.PlainAuth("", "648646891@qq.com",
+			"wbgnbwvppgsubdaf", "smtp.qq.com"),
+		Options: &opt,
+	})
+
+	ctx := context.TODO()
+
 	t.Run("respects max size", func(t *testing.T) {
 		perform(1000, func(id int) {
-			val, err := client.Ping(ctx).Result()
+			err := client.Ping(ctx)
 			if err != nil {
 				t.Errorf("Failed to Ping client, error: %v", err)
 			}
-			if val != "PONG" {
-				t.Errorf("Expected Ping result to be 'PONG', got '%s'", val)
-			}
 		})
 
-		pool := client.Pool()
-		if pool.Len() > 10 || pool.IdleLen() > 10 {
+		pool := client.Pool
+		fmt.Printf("%+v\n", pool.Stats())
+		if pool.Len() > 3 || pool.IdleLen() > 3 {
 			t.Errorf("Pool size exceeds maximum limit of 10, actual: %d/%d", pool.Len(), pool.IdleLen())
 		}
 		if pool.Len() != pool.IdleLen() {
 			t.Errorf("Pool size does not match idle size, pool: %d, idle: %d", pool.Len(), pool.IdleLen())
 		}
 	})
+}
+
+func perform(num int, fun func(i int)) {
+	wg := &sync.WaitGroup{}
+	for i := 0; i < num; i++ {
+		go func() {
+			newI := i
+			defer wg.Done()
+			wg.Add(1)
+			fun(newI)
+		}()
+	}
+	wg.Wait()
 }

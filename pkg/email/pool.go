@@ -43,23 +43,23 @@ type Stats struct {
 
 // ---------- TODO 完善NewClient
 
-type ClientWithPool struct {
+type Client struct {
 	*Pool
-	clientCfg *ClientOptions
+	clientCfg *ClientConfig
 }
 
-type ClientOptions struct {
+type ClientConfig struct {
 	addr string
 	auth smtp.Auth
 	*Options
 }
 
-func NewClientWithPool(opt *ClientOptions) *ClientWithPool {
-	p := NewPool(opt.addr, opt.auth, opt.Options)
-	return &ClientWithPool{Pool: p}
+func NewClient(cfg *ClientConfig) *Client {
+	p := NewPool(cfg.addr, cfg.auth, cfg.Options)
+	return &Client{Pool: p}
 }
 
-func (cp *ClientWithPool) SendMail(ctx context.Context, e *Email) error {
+func (cp *Client) SendMail(ctx context.Context, e *Email) error {
 	cli, err := cp.Pool.Get(ctx)
 	defer func() {
 		_ = cp.Pool.Put(cli)
@@ -70,9 +70,22 @@ func (cp *ClientWithPool) SendMail(ctx context.Context, e *Email) error {
 	return cli.sendMail(ctx, e)
 }
 
+func (cp *Client) Ping(ctx context.Context) error {
+	cli, err := cp.Pool.Get(ctx)
+	fmt.Printf("%+v\n", cli)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = cp.Pool.Put(cli)
+	}()
+
+	return cli.Noop()
+}
+
 // ----------------------
 
-type Client struct {
+type SMTPClient struct {
 	*smtp.Client
 	failCount int
 	createdAt time.Time
@@ -80,13 +93,37 @@ type Client struct {
 	pooled    bool
 }
 
-func (cn *Client) UsedAt() time.Time {
-	unix := atomic.LoadInt64(&cn.usedAt)
+func (sc *SMTPClient) UsedAt() time.Time {
+	unix := atomic.LoadInt64(&sc.usedAt)
 	return time.Unix(unix, 0)
 }
 
-func (cn *Client) SetUsedAt(tm time.Time) {
-	atomic.StoreInt64(&cn.usedAt, tm.Unix())
+func (sc *SMTPClient) SetUsedAt(tm time.Time) {
+	atomic.StoreInt64(&sc.usedAt, tm.Unix())
+}
+
+func (sc *SMTPClient) startTLS(t *tls.Config) (bool, error) {
+	if ok, _ := sc.Extension("STARTTLS"); !ok {
+		return false, nil
+	}
+
+	if err := sc.StartTLS(t); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (sc *SMTPClient) addAuth(auth smtp.Auth) (bool, error) {
+	if ok, _ := sc.Extension("AUTH"); !ok {
+		return false, nil
+	}
+
+	if err := sc.Auth(auth); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 type Pool struct {
@@ -101,8 +138,8 @@ type Pool struct {
 	queue chan struct{}
 
 	connsMu   sync.Mutex
-	conns     []*Client // 准确说这是一个smtp的客户端
-	idleConns []*Client
+	conns     []*SMTPClient // 准确说这是一个smtp的客户端
+	idleConns []*SMTPClient
 
 	poolSize     int
 	idleConnsLen int
@@ -137,8 +174,8 @@ func NewPool(addr string, auth smtp.Auth, opt *Options) *Pool {
 		},
 
 		queue:     make(chan struct{}, opt.PoolSize),
-		conns:     make([]*Client, 0, opt.PoolSize),
-		idleConns: make([]*Client, 0, opt.PoolSize),
+		conns:     make([]*SMTPClient, 0, opt.PoolSize),
+		idleConns: make([]*SMTPClient, 0, opt.PoolSize),
 	}
 
 	if host, _, e := net.SplitHostPort(addr); e != nil {
@@ -203,7 +240,7 @@ func (p *Pool) addIdleConn() error {
 }
 
 // 单纯的创建一个连接
-func (p *Pool) build() (*Client, error) {
+func (p *Pool) build() (*SMTPClient, error) {
 	// 要不要加连接超时
 	cl, err := smtp.Dial(p.addr)
 	if err != nil {
@@ -215,16 +252,16 @@ func (p *Pool) build() (*Client, error) {
 		cl.Hello(p.helloHostname)
 	}
 
-	c := &Client{Client: cl, createdAt: time.Now()}
+	c := &SMTPClient{Client: cl, createdAt: time.Now()}
 	c.SetUsedAt(time.Now())
 
-	if _, err := startTLS(c, p.tlsConfig); err != nil {
+	if _, err := c.startTLS(p.tlsConfig); err != nil {
 		c.Close()
 		return nil, err
 	}
 
 	if p.auth != nil {
-		if _, err := addAuth(c, p.auth); err != nil {
+		if _, err := c.addAuth(p.auth); err != nil {
 			c.Close()
 			return nil, err
 		}
@@ -233,7 +270,7 @@ func (p *Pool) build() (*Client, error) {
 	return c, nil
 }
 
-func (p *Pool) newConn(ctx context.Context) (*Client, error) {
+func (p *Pool) newConn(ctx context.Context) (*SMTPClient, error) {
 	c, err := p.build()
 	if err != nil {
 		return nil, err
@@ -260,35 +297,11 @@ func (p *Pool) newConn(ctx context.Context) (*Client, error) {
 	return c, nil
 }
 
-func startTLS(c *Client, t *tls.Config) (bool, error) {
-	if ok, _ := c.Extension("STARTTLS"); !ok {
-		return false, nil
-	}
-
-	if err := c.StartTLS(t); err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-func addAuth(c *Client, auth smtp.Auth) (bool, error) {
-	if ok, _ := c.Extension("AUTH"); !ok {
-		return false, nil
-	}
-
-	if err := c.Auth(auth); err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
 func (p *Pool) closed() bool {
 	return atomic.LoadUint32(&p._closed) == 1
 }
 
-func (p *Pool) Get(ctx context.Context) (*Client, error) {
+func (p *Pool) Get(ctx context.Context) (*SMTPClient, error) {
 	if p.closed() {
 		return nil, ErrClosed
 	}
@@ -372,7 +385,7 @@ func (p *Pool) waitTurn(ctx context.Context) error {
 	}
 }
 
-func (p *Pool) popIdle() (*Client, error) {
+func (p *Pool) popIdle() (*SMTPClient, error) {
 	if p.closed() {
 		return nil, ErrClosed
 	}
@@ -391,7 +404,7 @@ func (p *Pool) popIdle() (*Client, error) {
 	return cn, nil
 }
 
-func (p *Pool) isHealthyConn(client *Client) bool {
+func (p *Pool) isHealthyConn(client *SMTPClient) bool {
 	now := time.Now()
 
 	if p.cfg.ConnMaxLifetime > 0 && now.Sub(client.createdAt) >= p.cfg.ConnMaxLifetime {
@@ -412,7 +425,7 @@ func (p *Pool) isHealthyConn(client *Client) bool {
 	return true
 }
 
-func (p *Pool) Put(c *Client) error {
+func (p *Pool) Put(c *SMTPClient) error {
 	p.connsMu.Lock()
 	// 如果MaxIdleConns设置为0，标识无限空闲连接数？
 	if p.cfg.MaxIdleConns == 0 || p.idleConnsLen < p.cfg.MaxIdleConns {
@@ -438,7 +451,7 @@ func (p *Pool) Put(c *Client) error {
 	return nil
 }
 
-func (p *Pool) removeConn(client *Client) {
+func (p *Pool) removeConn(client *SMTPClient) {
 	for i, c := range p.conns {
 		if c == client {
 			p.conns = append(p.conns[:i], p.conns[i+1:]...)
@@ -479,7 +492,7 @@ func (p *Pool) IdleLen() int {
 	return n
 }
 
-func (p *Pool) CloseConn(client *Client) error {
+func (p *Pool) CloseConn(client *SMTPClient) error {
 	return client.Close()
 }
 
@@ -495,7 +508,7 @@ func (p *Pool) SendMail(ctx context.Context, e *Email) error {
 	return c.sendMail(ctx, e)
 }
 
-func (c *Client) sendMail(ctx context.Context, e *Email) error {
+func (c *SMTPClient) sendMail(ctx context.Context, e *Email) error {
 	recipients, err := addressLists(e.To, e.Cc, e.Bcc)
 	if err != nil {
 		return err

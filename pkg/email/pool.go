@@ -41,11 +41,43 @@ type Stats struct {
 	StaleConns uint32 // number of stale connections removed from the pool
 }
 
+// ---------- TODO 完善NewClient
+
+type ClientWithPool struct {
+	*Pool
+	clientCfg *ClientOptions
+}
+
+type ClientOptions struct {
+	addr string
+	auth smtp.Auth
+	*Options
+}
+
+func NewClientWithPool(opt *ClientOptions) *ClientWithPool {
+	p := NewPool(opt.addr, opt.auth, opt.Options)
+	return &ClientWithPool{Pool: p}
+}
+
+func (cp *ClientWithPool) SendMail(ctx context.Context, e *Email) error {
+	cli, err := cp.Pool.Get(ctx)
+	defer func() {
+		_ = cp.Pool.Put(cli)
+	}()
+	if err != nil {
+		return err
+	}
+	return cli.sendMail(ctx, e)
+}
+
+// ----------------------
+
 type Client struct {
 	*smtp.Client
 	failCount int
 	createdAt time.Time
 	usedAt    int64
+	pooled    bool
 }
 
 func (cn *Client) UsedAt() time.Time {
@@ -151,7 +183,7 @@ func (p *Pool) checkMinIdleConns() {
 }
 
 func (p *Pool) addIdleConn() error {
-	cn, err := p.build(context.TODO())
+	c, err := p.build()
 	if err != nil {
 		return err
 	}
@@ -161,24 +193,17 @@ func (p *Pool) addIdleConn() error {
 
 	// It is not allowed to add new connections to the closed connection pool.
 	if p.closed() {
-		_ = cn.Close()
+		_ = c.Close()
 		return ErrClosed
 	}
 
-	//p.conns = append(p.conns, cn)
-	p.idleConns = append(p.idleConns, cn)
+	p.conns = append(p.conns, c)
+	p.idleConns = append(p.idleConns, c)
 	return nil
 }
 
-func (p *Pool) build(ctx context.Context) (*Client, error) {
-	p.connsMu.Lock()
-	defer p.connsMu.Unlock()
-
-	// If pool is full remove the cn on next Put.
-	if p.poolSize >= p.cfg.PoolSize {
-		return nil, fmt.Errorf("连接池已满")
-	}
-
+// 单纯的创建一个连接
+func (p *Pool) build() (*Client, error) {
 	// 要不要加连接超时
 	cl, err := smtp.Dial(p.addr)
 	if err != nil {
@@ -205,14 +230,32 @@ func (p *Pool) build(ctx context.Context) (*Client, error) {
 		}
 	}
 
+	return c, nil
+}
+
+func (p *Pool) newConn(ctx context.Context) (*Client, error) {
+	c, err := p.build()
+	if err != nil {
+		return nil, err
+	}
+
+	p.connsMu.Lock()
+	defer p.connsMu.Unlock()
+
 	// It is not allowed to add new connections to the closed connection pool.
 	if p.closed() {
 		_ = c.Close()
 		return nil, ErrClosed
 	}
 
-	p.poolSize++
 	p.conns = append(p.conns, c)
+
+	// If pool is full remove the cn on next Put.
+	if p.poolSize >= p.cfg.PoolSize {
+		c.pooled = false
+	} else {
+		p.poolSize++
+	}
 
 	return c, nil
 }
@@ -250,6 +293,7 @@ func (p *Pool) Get(ctx context.Context) (*Client, error) {
 		return nil, ErrClosed
 	}
 
+	// 这里就是等待获取连接的条件是否满足，满足就往下走，不满足按照一定的策略等待
 	if err := p.waitTurn(ctx); err != nil {
 		return nil, err
 	}
@@ -281,7 +325,7 @@ func (p *Pool) Get(ctx context.Context) (*Client, error) {
 
 	atomic.AddUint32(&p.stats.Misses, 1)
 
-	newClient, err := p.build(ctx)
+	newClient, err := p.newConn(ctx)
 	// 如果获取连接失败，则重新腾出p.queue的一个位置
 	// 这里的p.queue中的位置是在waitTurn()中占用的
 	if err != nil {
@@ -296,30 +340,34 @@ func (p *Pool) waitTurn(ctx context.Context) error {
 	// queue可以认为是一个大小为pool size的token池，当这个chan还能写入则return
 	select {
 	case p.queue <- struct{}{}:
+		log.Println("不用等待pool，直接有空位")
 		return nil
 	default:
 	}
 
 	timer := p.timers.Get().(*time.Timer)
 	timer.Reset(p.cfg.PoolTimeout)
-
+	log.Println("等待pool空闲位置...")
 	select {
 	case <-ctx.Done():
 		if !timer.Stop() {
 			<-timer.C
 		}
 		p.timers.Put(timer)
+		log.Println("等待pool空闲位置...不好意思ctx超时了")
 		return ctx.Err()
 	case p.queue <- struct{}{}:
 		if !timer.Stop() {
 			<-timer.C
 		}
 		p.timers.Put(timer)
+		log.Println("等待pool空闲位置...nice等到了")
 		return nil
 	// 等待超时
 	case <-timer.C:
 		p.timers.Put(timer)
 		atomic.AddUint32(&p.stats.Timeouts, 1)
+		log.Println("等待pool空闲位置...bad等待pool超时了")
 		return ErrPoolTimeout
 	}
 }
@@ -371,6 +419,7 @@ func (p *Pool) Put(c *Client) error {
 		err := c.Reset()
 		// 重置失败，直接关闭
 		if err != nil {
+			log.Println("put时，重置连接失败", err)
 			_ = c.Close()
 			p.connsMu.Unlock()
 			return err
@@ -385,6 +434,7 @@ func (p *Pool) Put(c *Client) error {
 
 	// freeTurn()
 	<-p.queue
+	log.Println("put放进去了一个位置")
 	return nil
 }
 
@@ -438,13 +488,14 @@ func (p *Pool) SendMail(ctx context.Context, e *Email) error {
 	if c == nil || err != nil {
 		return fmt.Errorf("Err: 获取邮件客户端连接失败: %v", err)
 	}
-	defer func() { _ = p.Put(c) }()
+	defer func() {
+		_ = p.Put(c)
+	}()
 
 	return c.sendMail(ctx, e)
 }
 
 func (c *Client) sendMail(ctx context.Context, e *Email) error {
-
 	recipients, err := addressLists(e.To, e.Cc, e.Bcc)
 	if err != nil {
 		return err
@@ -508,4 +559,25 @@ func addressLists(lists ...[]string) ([]string, error) {
 	}
 
 	return combined, nil
+}
+
+func (p *Pool) Close() error {
+	if !atomic.CompareAndSwapUint32(&p._closed, 0, 1) {
+		return ErrClosed
+	}
+
+	var firstErr error
+	p.connsMu.Lock()
+	for _, cn := range p.conns {
+		if err := cn.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	p.conns = nil
+	p.poolSize = 0
+	p.idleConns = nil
+	p.idleConnsLen = 0
+	p.connsMu.Unlock()
+
+	return firstErr
 }

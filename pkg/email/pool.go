@@ -41,8 +41,6 @@ type Stats struct {
 	StaleConns uint32 // number of stale connections removed from the pool
 }
 
-// ---------- TODO 完善NewClient
-
 type Client struct {
 	*Pool
 	clientCfg *ClientConfig
@@ -71,19 +69,17 @@ func (cp *Client) SendMail(ctx context.Context, e *Email) error {
 }
 
 func (cp *Client) Ping(ctx context.Context) error {
+	// 考虑优先级队列，防止老的等待连接被饿死
 	cli, err := cp.Pool.Get(ctx)
-	fmt.Printf("%+v\n", cli)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		_ = cp.Pool.Put(cli)
 	}()
-
+	// TODO 统计下执行时间
 	return cli.Noop()
 }
-
-// ----------------------
 
 type SMTPClient struct {
 	*smtp.Client
@@ -185,7 +181,7 @@ func NewPool(addr string, auth smtp.Auth, opt *Options) *Pool {
 	}
 
 	p.connsMu.Lock()
-	p.checkMinIdleConns() // 启动时即创建所有的连接，改成按需创建吧。
+	p.checkMinIdleConns() // 保证池子里的连接数量能够达到MinIdleConns的要求
 	p.connsMu.Unlock()
 
 	return p
@@ -288,6 +284,7 @@ func (p *Pool) newConn(ctx context.Context) (*SMTPClient, error) {
 	p.conns = append(p.conns, c)
 
 	// If pool is full remove the cn on next Put.
+	// 要不是put执行不到这个if分支
 	if p.poolSize >= p.cfg.PoolSize {
 		c.pooled = false
 	} else {
@@ -301,6 +298,7 @@ func (p *Pool) closed() bool {
 	return atomic.LoadUint32(&p._closed) == 1
 }
 
+// Get 需要考虑优先级队列，防止老的等待连接被饿死
 func (p *Pool) Get(ctx context.Context) (*SMTPClient, error) {
 	if p.closed() {
 		return nil, ErrClosed
@@ -320,7 +318,7 @@ func (p *Pool) Get(ctx context.Context) (*SMTPClient, error) {
 		if err != nil {
 			return nil, err
 		}
-		// 没有取到连接，终止循环，在下面的逻辑中新建一个连接
+		// 没有取到连接，准确说是没有取到空闲连接，终止循环，在循环外的逻辑中新建一个连接
 		if cn == nil {
 			break
 		}
@@ -335,7 +333,7 @@ func (p *Pool) Get(ctx context.Context) (*SMTPClient, error) {
 		atomic.AddUint32(&p.stats.Hits, 1)
 		return cn, nil
 	}
-
+	// idle中没有空闲连接了，misses 意味着要再创建新的连接
 	atomic.AddUint32(&p.stats.Misses, 1)
 
 	newClient, err := p.newConn(ctx)
@@ -353,34 +351,34 @@ func (p *Pool) waitTurn(ctx context.Context) error {
 	// queue可以认为是一个大小为pool size的token池，当这个chan还能写入则return
 	select {
 	case p.queue <- struct{}{}:
-		log.Println("不用等待pool，直接有空位")
+		//log.Println("不用等待pool，直接有空位")
 		return nil
 	default:
 	}
 
 	timer := p.timers.Get().(*time.Timer)
 	timer.Reset(p.cfg.PoolTimeout)
-	log.Println("等待pool空闲位置...")
+	//log.Println("等待pool空闲位置...")
 	select {
 	case <-ctx.Done():
 		if !timer.Stop() {
 			<-timer.C
 		}
 		p.timers.Put(timer)
-		log.Println("等待pool空闲位置...不好意思ctx超时了")
+		//log.Println("等待pool空闲位置...不好意思ctx超时了")
 		return ctx.Err()
 	case p.queue <- struct{}{}:
 		if !timer.Stop() {
 			<-timer.C
 		}
 		p.timers.Put(timer)
-		log.Println("等待pool空闲位置...nice等到了")
+		//log.Println("等待pool空闲位置...nice等到了")
 		return nil
 	// 等待超时
 	case <-timer.C:
 		p.timers.Put(timer)
 		atomic.AddUint32(&p.stats.Timeouts, 1)
-		log.Println("等待pool空闲位置...bad等待pool超时了")
+		//log.Println("等待pool空闲位置...bad等待pool超时了")
 		return ErrPoolTimeout
 	}
 }
@@ -414,8 +412,6 @@ func (p *Pool) isHealthyConn(client *SMTPClient) bool {
 		return false
 	}
 
-	// 这里还没有仔细思考 针对email的检查
-	// 暂时还不确定这个函数是否符合要求
 	if err := client.Noop(); err != nil {
 		return false
 	}
@@ -427,7 +423,11 @@ func (p *Pool) isHealthyConn(client *SMTPClient) bool {
 
 func (p *Pool) Put(c *SMTPClient) error {
 	p.connsMu.Lock()
-	// 如果MaxIdleConns设置为0，标识无限空闲连接数？
+	// 放回的时候，pool_size是不会发生变化的。除非要remove掉这个连接。
+	// 如果MaxIdleConns设置为0，标识无限空闲连接数
+	// p.idleConnsLen >= p.cfg.MaxIdleConns的情况是不是同时put多次(加锁了应该不是)。min_idle_size > max_idle_size的情况？
+	// p.cfg.MaxIdleConns == 0 且 p.cfg.MinIdleConns == 0 的情况，也会将 连接放到idleConns里，这种情况是不是违背了MinIdleConns的概念？但是效果是不影响的，即连接不会重新创建
+	// p.cfg.MaxIdleConns == 1 且 p.cfg.MinIdleConns == 0 的情况，同上
 	if p.cfg.MaxIdleConns == 0 || p.idleConnsLen < p.cfg.MaxIdleConns {
 		err := c.Reset()
 		// 重置失败，直接关闭
@@ -446,8 +446,8 @@ func (p *Pool) Put(c *SMTPClient) error {
 	p.connsMu.Unlock()
 
 	// freeTurn()
+	// 不管是放到idleconn中，还是remove掉，都会腾出一个p.queue的位置
 	<-p.queue
-	log.Println("put放进去了一个位置")
 	return nil
 }
 
@@ -463,6 +463,7 @@ func (p *Pool) removeConn(client *SMTPClient) {
 	// 关闭移除的连接
 	_ = client.Close()
 
+	// 测试发现一般不会走到这里，走到这个函数的条件是设置了max_idle_size > 0 并且 len(idleconn) >= max_idle_size
 	atomic.AddUint32(&p.stats.StaleConns, 1)
 }
 

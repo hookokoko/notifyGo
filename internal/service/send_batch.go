@@ -12,7 +12,7 @@ type SendBatchService struct {
 }
 
 func NewSendBatchService() *SendBatchService {
-	cfg := mq.NewConfig([]string{"127.0.0.1:9092"})
+	cfg := mq.NewConfig("../../config/kafka_topic.toml")
 	return &SendBatchService{
 		producer: mq.NewProducer(cfg),
 	}
@@ -30,7 +30,7 @@ func (ss *SendBatchService) Process(_ context.Context, tasks []internal.Task) er
 		}
 
 		// topic的选择要抽象出来
-		ss.producer.Send("email", taskBytes)
+		ss.producer.Send("sms", "business", taskBytes)
 	}
 
 	return nil

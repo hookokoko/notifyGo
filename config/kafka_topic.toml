@@ -1,0 +1,20 @@
+host = ["127.0.0.1:9092"]
+
+[topicMappings.sms]
+verification = "HighTopic"
+notification = "MediumTopic"
+marketing = "LowTopic"
+
+[topicMappings.email]
+verification = "HighTopic"
+notification = "MediumTopic"
+marketing = "LowTopic"
+
+[topicMappings.wechat]
+verification = "HighTopic"
+notification = "MediumTopic"
+marketing = "LowTopic"
+
+[topicMappings.push]
+notification = "MediumTopic"
+marketing = "LowTopic"

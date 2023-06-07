@@ -6,6 +6,25 @@ import (
 	"notifyGo/pkg/mq"
 )
 
+// 消费者拓扑图，原则就是所有的topic都是等价的，也就是消费者的消费逻辑不绑定topic
+// 以high这个topic为例
+// high
+// - cg_email_验
+// 		consumer_1
+// 		consumer_2
+// 		consumer_3
+// 		...
+// - cg_sms_验
+// 		consumer_1
+// 		consumer_2
+// 		consumer_3
+// 		...
+// - cg_push_验
+// 		consumer_1
+// 		consumer_2
+// 		consumer_3
+// 		...
+
 // 在这里应该进行消费者的启动
 func main() {
 	//c := engine.NewConsumer([]string{"127.0.0.1:9092"})
@@ -15,13 +34,14 @@ func main() {
 	emailPool := worker.NewPoolExecutor()
 	emailHandler := worker.NewConsumerHandler(hm, emailPool)
 
-	cfg := mq.NewConfig([]string{"127.0.0.1:9092"})
+	mqCfg := mq.NewConfig("../../config/kafka_topic.toml")
 
 	// groupId 标识起动的消费者属于对应哪个消费者组
-	cg := mq.NewConsumerGroup(cfg, "email", emailHandler)
+	cg := mq.NewConsumerGroup(mqCfg, "email.marketing", emailHandler)
 
 	// 这里面表示消费哪些topic消息
-	cg.Start([]string{"email"})
+	// 通过配置文件查询是LowTopic
+	cg.Start([]string{mqCfg.Topics.EmailMappings.Marketing})
 }
 
 func startEmail(hm *sender.HandleManager, pool *worker.PoolExecutor, cfg mq.Config) {

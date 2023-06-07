@@ -2,6 +2,8 @@ package mq
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -10,22 +12,41 @@ import (
 )
 
 type Producer struct {
-	host []string
+	Config
 }
 
 func NewProducer(cfg Config) *Producer {
 	return &Producer{
-		host: cfg.host,
+		Config: cfg,
 	}
 }
 
-func (p *Producer) Send(topic string, data []byte) {
+// TODO 创建枚举
+func (p *Producer) topic(channel, msgType string) (string, error) {
+	// 尴尬，需要将toml转成map
+	var topics map[string]map[string]string
+	tb, err := json.Marshal(p.Topics)
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(tb, &topics)
+	if err != nil {
+		return "", err
+	}
+	match, ok := topics[channel][msgType]
+	if !ok {
+		return "", fmt.Errorf("找不到对应topic")
+	}
+	return match, nil
+}
+
+func (p *Producer) Send(channel, msgType string, data []byte) {
 	config := sarama.NewConfig()
 	// 异步生产者不建议把 Errors 和 Successes 都开启，一般开启 Errors 就行
 	// 同步生产者就必须都开启，因为会同步返回发送成功或者失败
 	config.Producer.Return.Errors = true    // 设定是否需要返回错误信息
 	config.Producer.Return.Successes = true // 设定是否需要返回成功信息
-	producer, err := sarama.NewAsyncProducer(p.host, config)
+	producer, err := sarama.NewAsyncProducer(p.Host, config)
 	if err != nil {
 		log.Fatal("NewSyncProducer err:", err)
 	}
@@ -51,6 +72,12 @@ func (p *Producer) Send(topic string, data []byte) {
 			errors++
 		}
 	}()
+
+	topic, err := p.topic(channel, msgType)
+	if err != nil {
+		panic(err)
+	}
+
 	msg := &sarama.ProducerMessage{Topic: topic, Key: nil, Value: sarama.ByteEncoder(data)}
 	// 异步发送只是写入内存了就返回了，并没有真正发送出去
 	// sarama 库中用的是一个 channel 来接收，后台 goroutine 异步从该 channel 中取出消息并真正发送

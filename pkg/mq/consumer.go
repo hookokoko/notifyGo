@@ -24,13 +24,13 @@ type ConsumerGroup struct {
 func NewConsumerGroup(cfg Config, groupId string, handler sarama.ConsumerGroupHandler) *ConsumerGroup {
 	sCfg := sarama.NewConfig()
 	sCfg.Consumer.Return.Errors = true
-	cg, err := sarama.NewConsumerGroup(cfg.host, groupId, sCfg)
+	cg, err := sarama.NewConsumerGroup(cfg.Host, groupId, sCfg)
 	if err != nil {
 		log.Fatal("NewConsumerGroup err: ", err)
 	}
 
 	return &ConsumerGroup{
-		host:    cfg.host,
+		host:    cfg.Host,
 		handler: handler,
 		sCg:     cg,
 	}

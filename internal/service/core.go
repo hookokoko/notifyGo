@@ -35,20 +35,20 @@ func NewCore() *Core {
 // 1. 创建一个delivery记录
 // 2. 创建一个target，并关联delivery id
 // 3. 推送至kafka
-func (c *Core) Send(ctx context.Context, channel string, target internal.ITarget, templateId int64,
+func (c *Core) Send(ctx context.Context, channel string, msgType string, target internal.ITarget, templateId int64,
 	variable map[string]interface{}) error {
 	// 获取发送内容
-	msgContent := c.ContentService.GetContent(target, templateId, variable)
-
-	err := c.NotifyGoDAO.InsertRecord(ctx, templateId, target, msgContent)
+	msg := c.ContentService.GetContent(target, templateId, variable)
+	msg.Type = msgType
+	err := c.NotifyGoDAO.InsertRecord(ctx, templateId, target, msg.Content)
 	if err != nil {
 		return err
 	}
 
 	task := internal.Task{
-		//MsgId:       delivery.Id, // 这里考虑手动生成，现在先不传
+		//TaskId:       delivery.Id, // 这里考虑手动生成，现在先不传
 		SendChannel: channel,
-		MsgContent:  msgContent,
+		MsgContent:  msg,
 		MsgReceiver: target,
 	}
 

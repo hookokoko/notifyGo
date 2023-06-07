@@ -16,10 +16,12 @@ func NewContentService() *ContentService {
 	}
 }
 
-func (cs *ContentService) GetContent(target internal.ITarget, templateId int64, variable map[string]interface{}) string {
-	content, err := cs.TemplateDAO.GetContent(templateId, "")
+func (cs *ContentService) GetContent(target internal.ITarget, templateId int64, variable map[string]interface{}) internal.MsgContent {
+	content := internal.MsgContent{}
+	msg, err := cs.TemplateDAO.GetContent(templateId, "")
 	if err != nil {
-		return ""
+		return content
 	}
+	content.Content = msg
 	return content
 }

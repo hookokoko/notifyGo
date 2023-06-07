@@ -9,7 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type PushHandler struct{}
+type PushHandler struct {
+}
 
 func NewPushHandler() *PushHandler {
 	return &PushHandler{}
@@ -23,6 +24,7 @@ func (p *PushHandler) Send(ctx *gin.Context) {
 	c := service.NewCore()
 	err := c.Send(context.TODO(),
 		"email",
+
 		internal.EmailTarget{Email: "ch_haokun@163.com"},
 		123,
 		map[string]interface{}{},

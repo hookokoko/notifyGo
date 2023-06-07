@@ -12,7 +12,7 @@ type SendService struct {
 }
 
 func NewSendService() *SendService {
-	cfg := mq.NewConfig([]string{"127.0.0.1:9092"})
+	cfg := mq.NewConfig("../../config/kafka_topic.toml")
 	return &SendService{
 		producer: mq.NewProducer(cfg),
 	}
@@ -25,7 +25,9 @@ func (ss *SendService) Process(_ context.Context, task internal.Task) error {
 		return err
 	}
 
-	// topic的选择要抽象出来
-	ss.producer.Send("email", taskBytes)
+	msgType := task.MsgContent.Type
+	channel := task.SendChannel
+
+	ss.producer.Send(channel, msgType, taskBytes)
 	return nil
 }

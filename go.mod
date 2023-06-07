@@ -3,6 +3,7 @@ module notifyGo
 go 1.19
 
 require (
+	github.com/BurntSushi/toml v1.3.1
 	github.com/Shopify/sarama v1.38.1
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-sql-driver/mysql v1.7.1

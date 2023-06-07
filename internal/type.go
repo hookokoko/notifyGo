@@ -8,10 +8,16 @@ type TaskInfo struct {
 }
 
 type Task struct {
-	MsgId       int64
+	TaskId int64
+	// 会根据 SendChannel 、MsgType 选择kafka topic
 	SendChannel string // 消息渠道，比如是短信、邮件、推送等
-	MsgContent  string
+	MsgContent  MsgContent
 	MsgReceiver ITarget
+}
+
+type MsgContent struct {
+	Type    string // 消息类型，比如营销、验证码、通知
+	Content string
 }
 
 type ITarget interface {

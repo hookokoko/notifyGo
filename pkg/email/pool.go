@@ -47,13 +47,13 @@ type Client struct {
 }
 
 type ClientConfig struct {
-	addr string
-	auth smtp.Auth
+	Addr string
+	Auth smtp.Auth
 	*Options
 }
 
 func NewClient(cfg *ClientConfig) *Client {
-	p := NewPool(cfg.addr, cfg.auth, cfg.Options)
+	p := NewPool(cfg.Addr, cfg.Auth, cfg.Options)
 	return &Client{Pool: p}
 }
 

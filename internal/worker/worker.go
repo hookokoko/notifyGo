@@ -24,24 +24,20 @@ type ConsumerGroupHandler struct {
 	pool     *PoolExecutor
 }
 
-// Setup 执行在 获得新 session 后 的第一步, 在 ConsumeClaim() 之前
-func (h *ConsumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error { return nil }
-
-// Cleanup 执行在 session 结束前, 当所有 ConsumeClaim goroutines 都退出时
-func (h *ConsumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
-
 // ConsumeClaim 具体的消费逻辑
 func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		log.Printf("[consumer] name:%s topic:%q partition:%d offset:%d\n", h.name, msg.Topic, msg.Partition, msg.Offset)
+
 		// 1. 这里将msg序列化，获取消息类型
-		// task.ITarget是接口类型，该如何序列化
+		//    其中，task.ITarget是接口类型，该如何序列化？
 		taskInfo := new(internal.Task)
 		err := json.Unmarshal(msg.Value, taskInfo)
 		if err != nil {
 			log.Printf("[consumer] name:%s topic:%q partition:%d offset:%d <ERROR: 解析消息体出错 %v>\n",
 				h.name, msg.Topic, msg.Partition, msg.Offset, err)
 		}
+
 		// 2. 根据消息渠道找到对应的handler
 		hAction, err := h.handlers.Get(taskInfo.SendChannel)
 		if err != nil {
@@ -63,3 +59,9 @@ func (h *ConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, cl
 	}
 	return nil
 }
+
+// Setup 执行在 获得新 session 后 的第一步, 在 ConsumeClaim() 之前
+func (h *ConsumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error { return nil }
+
+// Cleanup 执行在 session 结束前, 当所有 ConsumeClaim goroutines 都退出时
+func (h *ConsumerGroupHandler) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }

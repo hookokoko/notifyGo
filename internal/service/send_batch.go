@@ -12,7 +12,7 @@ type SendBatchService struct {
 }
 
 func NewSendBatchService() *SendBatchService {
-	cfg := mq.NewConfig("../../config/kafka_topic.toml")
+	cfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
 	return &SendBatchService{
 		producer: mq.NewProducer(cfg),
 	}

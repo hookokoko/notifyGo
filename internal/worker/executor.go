@@ -10,7 +10,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 )
 
-// NewTaskExecutor 带协程池的task执行器
+// NewPoolExecutor 带协程池的task执行器
 func NewPoolExecutor() *PoolExecutor {
 	defaultPool, err := ants.NewPool(runtime.NumCPU())
 	if err != nil {

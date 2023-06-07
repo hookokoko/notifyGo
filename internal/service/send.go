@@ -12,7 +12,7 @@ type SendService struct {
 }
 
 func NewSendService() *SendService {
-	cfg := mq.NewConfig("../../config/kafka_topic.toml")
+	cfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
 	return &SendService{
 		producer: mq.NewProducer(cfg),
 	}

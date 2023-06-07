@@ -35,8 +35,8 @@ func TestPool(t *testing.T) {
 			ConnMaxIdleTime: time.Second, // 距离上一次使用时间多久之后标记失效
 		}
 		client := NewClient(&ClientConfig{
-			addr: "smtp.qq.com:25",
-			auth: smtp.PlainAuth("", "648646891@qq.com",
+			Addr: "smtp.qq.com:25",
+			Auth: smtp.PlainAuth("", "648646891@qq.com",
 				"", "smtp.qq.com"),
 			Options: poolOpt,
 		})
@@ -64,8 +64,8 @@ func TestPool(t *testing.T) {
 			ConnMaxIdleTime: 10 * time.Second, // 距离上一次使用时间多久之后标记失效
 		}
 		client := NewClient(&ClientConfig{
-			addr: "smtp.qq.com:25",
-			auth: smtp.PlainAuth("", "648646891@qq.com",
+			Addr: "smtp.qq.com:25",
+			Auth: smtp.PlainAuth("", "648646891@qq.com",
 				"", "smtp.qq.com"),
 			Options: poolOpt,
 		})
@@ -96,8 +96,8 @@ func TestPool(t *testing.T) {
 			ConnMaxIdleTime: 10 * time.Second, // 距离上一次使用时间多久之后标记失效
 		}
 		client := NewClient(&ClientConfig{
-			addr: "smtp.qq.com:25",
-			auth: smtp.PlainAuth("", "648646891@qq.com",
+			Addr: "smtp.qq.com:25",
+			Auth: smtp.PlainAuth("", "648646891@qq.com",
 				"", "smtp.qq.com"),
 			Options: poolOpt,
 		})
@@ -128,8 +128,8 @@ func TestPool(t *testing.T) {
 			ConnMaxIdleTime: 10 * time.Second, // 距离上一次使用时间多久之后标记失效
 		}
 		client := NewClient(&ClientConfig{
-			addr: "smtp.qq.com:25",
-			auth: smtp.PlainAuth("", "648646891@qq.com",
+			Addr: "smtp.qq.com:25",
+			Auth: smtp.PlainAuth("", "648646891@qq.com",
 				"", "smtp.qq.com"),
 			Options: poolOpt,
 		})

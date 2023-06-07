@@ -2,16 +2,13 @@ package sender
 
 import (
 	"context"
-	"fmt"
 	"net/smtp"
 	"notifyGo/internal"
-
-	"github.com/jordan-wright/email"
+	"notifyGo/pkg/email"
+	"time"
 )
 
-type EmailHandler struct {
-	client *email.Email
-}
+type EmailHandler struct{}
 
 func NewEmailHandler() *EmailHandler {
 	return &EmailHandler{}
@@ -22,18 +19,27 @@ func (eh *EmailHandler) Name() string {
 }
 
 func (eh *EmailHandler) Execute(ctx context.Context, task *internal.Task) (err error) {
-	fmt.Printf("send email success, %v\n", *task)
+	client := email.NewClient(&email.ClientConfig{
+		Addr: "smtp.qq.com:25",
+		Auth: smtp.PlainAuth("", "648646891@qq.com",
+			"", "smtp.qq.com"),
+		Options: &email.Options{
+			PoolSize:        5,
+			PoolTimeout:     30 * time.Second,
+			MinIdleConns:    0,
+			MaxIdleConns:    1,
+			ConnMaxIdleTime: 10 * time.Second, // 距离上一次使用时间多久之后标记失效
+		},
+	})
 
-	e := email.NewEmail()
-	e.From = "notifyGo <648646891@qq.com>"
-	e.To = []string{"ch_haokun@163.com"}
-	e.Bcc = []string{"hooko@tju.edu.cn"}
-	e.Cc = []string{"hookokoko@126.com"}
-	e.Subject = "Awesome Subject"
-	e.Text = []byte("Text Body is, of course, supported!")
-	e.HTML = []byte("<h1>Fancy HTML is supported, too!</h1>")
-	err = e.Send("smtp.qq.com:25",
-		smtp.PlainAuth("", "648646891@qq.com", "mmlryfcwupktbehd", "smtp.qq.com"))
+	defer func() { _ = client.Close() }()
+
+	emailCfg := &email.Email{}
+	emailCfg.From = "notifyGo <648646891@qq.com>"
+	emailCfg.To = []string{task.MsgReceiver.Value()}
+	emailCfg.Text = []byte(task.MsgContent.Content)
+
+	err = client.SendMail(ctx, emailCfg)
 
 	return
 }

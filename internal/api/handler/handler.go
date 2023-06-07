@@ -24,7 +24,7 @@ func (p *PushHandler) Send(ctx *gin.Context) {
 	c := service.NewCore()
 	err := c.Send(context.TODO(),
 		"email",
-
+		"notification",
 		internal.EmailTarget{Email: "ch_haokun@163.com"},
 		123,
 		map[string]interface{}{},

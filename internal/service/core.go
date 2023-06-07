@@ -40,6 +40,7 @@ func (c *Core) Send(ctx context.Context, channel string, msgType string, target 
 	// 获取发送内容
 	msg := c.ContentService.GetContent(target, templateId, variable)
 	msg.Type = msgType
+
 	err := c.NotifyGoDAO.InsertRecord(ctx, templateId, target, msg.Content)
 	if err != nil {
 		return err

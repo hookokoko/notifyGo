@@ -28,11 +28,15 @@ import (
 
 // 在这里应该进行消费者的启动
 func main() {
+	test1()
+}
+
+func normal() {
 	hm := sender.NewHandlerManager()
 	emailPool := worker.NewPoolExecutor()
 	emailHandler := worker.NewConsumerHandler(hm, emailPool)
 
-	mqCfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
+	mqCfg := mq.NewConfig("/Users/tiger/GolandProjects/notifyGo/config/kafka_topic.toml")
 
 	// groupId 标识起动的消费者属于对应哪个消费者组
 	cg1 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
@@ -44,6 +48,25 @@ func main() {
 	cg3 := mq.NewConsumerGroup(mqCfg, "email.verification", []string{mqCfg.Topics.EmailMappings.Verification}, emailHandler)
 	go cg3.Start(context.TODO())
 
+	select {}
+}
+
+// 单个topic、消费者组，多个消费者
+func test1() {
+	hm := sender.NewHandlerManager()
+	emailPool := worker.NewPoolExecutor()
+	emailHandler := worker.NewConsumerHandler(hm, emailPool)
+
+	mqCfg := mq.NewConfig("/Users/tiger/GolandProjects/notifyGo/config/kafka_topic.toml")
+
+	ctx := context.Background()
+	// groupId 标识起动的消费者属于对应哪个消费者组
+	cg1 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
+	cg2 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
+	cg3 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
+	go cg1.Start(ctx)
+	go cg2.Start(ctx)
+	go cg3.Start(ctx)
 	select {}
 }
 

@@ -28,60 +28,46 @@ import (
 
 // 在这里应该进行消费者的启动
 func main() {
-	test1()
-}
-
-func normal() {
 	hm := sender.NewHandlerManager()
 	emailPool := worker.NewPoolExecutor()
-	emailHandler := worker.NewConsumerHandler(hm, emailPool)
-
-	mqCfg := mq.NewConfig("/Users/tiger/GolandProjects/notifyGo/config/kafka_topic.toml")
-
-	// groupId 标识起动的消费者属于对应哪个消费者组
-	cg1 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
-	go cg1.Start(context.TODO())
-
-	cg2 := mq.NewConsumerGroup(mqCfg, "email.notification", []string{mqCfg.Topics.EmailMappings.Notification}, emailHandler)
-	go cg2.Start(context.TODO())
-
-	cg3 := mq.NewConsumerGroup(mqCfg, "email.verification", []string{mqCfg.Topics.EmailMappings.Verification}, emailHandler)
-	go cg3.Start(context.TODO())
-
-	select {}
-}
-
-// 单个topic、消费者组，多个消费者
-func test1() {
-	hm := sender.NewHandlerManager()
-	emailPool := worker.NewPoolExecutor()
-	emailHandler := worker.NewConsumerHandler(hm, emailPool)
-
-	mqCfg := mq.NewConfig("/Users/tiger/GolandProjects/notifyGo/config/kafka_topic.toml")
-
-	ctx := context.Background()
-	// groupId 标识起动的消费者属于对应哪个消费者组
-	cg1 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
-	cg2 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
-	cg3 := mq.NewConsumerGroup(mqCfg, "email.marketing", []string{mqCfg.Topics.EmailMappings.Marketing}, emailHandler)
-	go cg1.Start(ctx)
-	go cg2.Start(ctx)
-	go cg3.Start(ctx)
-	select {}
-}
-
-func startEmail(hm *sender.HandleManager, pool *worker.PoolExecutor, cfg mq.Config) {
+	smsPool := worker.NewPoolExecutor()
+	pushPool := worker.NewPoolExecutor()
 	mqCfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
-	handler := worker.NewConsumerHandler(hm, pool)
-	cg := mq.NewConsumerGroup(cfg, "email.notice", []string{mqCfg.Topics.EmailMappings.Notification}, handler)
-	go cg.Start(context.TODO())
+	emailHandler, _ := hm.Get("email")
+	smsHandler, _ := hm.Get("sms")
+	pushHandler, _ := hm.Get("push")
+	startEmail(emailHandler, emailPool, mqCfg)
+	startSMS(smsHandler, smsPool, mqCfg)
+	startPush(pushHandler, pushPool, mqCfg)
+	select {}
 }
 
-//func startSMS(hm *sender.HandleManager, pool *worker.PoolExecutor, cfg mq.Config) {
-//	handler := worker.NewConsumerHandler(hm, pool)
-//	cg1 := mq.NewConsumerGroup(cfg, "sms.notice", handler)
-//	cg1.Start([]string{"notify_go_common"})
-//
-//	cg2 := mq.NewConsumerGroup(cfg, "sms.market", handler)
-//	cg2.Start([]string{"notify_go_common"})
-//}
+func startEmail(h sender.IHandler, pool *worker.PoolExecutor, cfg mq.Config) {
+	handler := worker.NewConsumerHandler(h, pool)
+	cg1 := mq.NewConsumerGroup(cfg, "email.verification", []string{cfg.Topics.EmailMappings.Verification}, handler)
+	cg2 := mq.NewConsumerGroup(cfg, "email.notification", []string{cfg.Topics.EmailMappings.Notification}, handler)
+	cg3 := mq.NewConsumerGroup(cfg, "email.marketing", []string{cfg.Topics.EmailMappings.Marketing}, handler)
+	go cg1.Start(context.TODO())
+	go cg2.Start(context.TODO())
+	go cg3.Start(context.TODO())
+}
+
+func startSMS(h sender.IHandler, pool *worker.PoolExecutor, cfg mq.Config) {
+	handler := worker.NewConsumerHandler(h, pool)
+	cg1 := mq.NewConsumerGroup(cfg, "sms.verification", []string{cfg.Topics.SmsMappings.Verification}, handler)
+	cg2 := mq.NewConsumerGroup(cfg, "sms.notification", []string{cfg.Topics.SmsMappings.Notification}, handler)
+	cg3 := mq.NewConsumerGroup(cfg, "sms.marketing", []string{cfg.Topics.SmsMappings.Marketing}, handler)
+	go cg1.Start(context.TODO())
+	go cg2.Start(context.TODO())
+	go cg3.Start(context.TODO())
+}
+
+func startPush(h sender.IHandler, pool *worker.PoolExecutor, cfg mq.Config) {
+	handler := worker.NewConsumerHandler(h, pool)
+	cg1 := mq.NewConsumerGroup(cfg, "push.verification", []string{cfg.Topics.PushMappings.Verification}, handler)
+	cg2 := mq.NewConsumerGroup(cfg, "push.notification", []string{cfg.Topics.PushMappings.Notification}, handler)
+	cg3 := mq.NewConsumerGroup(cfg, "push.marketing", []string{cfg.Topics.PushMappings.Marketing}, handler)
+	go cg1.Start(context.TODO())
+	go cg2.Start(context.TODO())
+	go cg3.Start(context.TODO())
+}

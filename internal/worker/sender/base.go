@@ -21,7 +21,7 @@ func NewHandlerManager() *HandleManager {
 		manager: item.NewManager(
 			NewEmailHandler(),
 			NewSmsHandler(),
-			NewFeishuHandler(),
+			NewPushHandler(),
 		),
 	}
 }

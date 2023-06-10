@@ -1,7 +1,7 @@
 package internal
 
 const (
-	SMSNAME    = "sms"
-	EMAILNAME  = "email"
-	FEISHUNAME = "feishu"
+	SmsNAME   = "sms"
+	EmailNAME = "email"
+	PushNAME  = "push"
 )

@@ -16,5 +16,6 @@ notification = "MediumTopic"
 marketing = "LowTopic"
 
 [topicMappings.push]
+verification = "HighTopic"
 notification = "MediumTopic"
 marketing = "LowTopic"

@@ -20,10 +20,19 @@ type ConsumerGroup struct {
 	topics  []string
 }
 
-func NewConsumerGroup(cfg Config, groupId string, topics []string, handler sarama.ConsumerGroupHandler) *ConsumerGroup {
+// TODO handler的动态加载
+func NewConsumerGroup(mqCfg *Config, channel string, handler sarama.ConsumerGroupHandler) *ConsumerGroup {
 	sCfg := sarama.NewConfig()
 	sCfg.Consumer.Return.Errors = true
-	cg, err := sarama.NewConsumerGroup(cfg.Host, groupId, sCfg)
+
+	topics := mqCfg.GetTopicsByChannel(channel)
+	groupId := mqCfg.GetGroupIdByChannel(channel)
+
+	// 这里面一个channel就是统一的一个group，就没法更细粒度的区分验证码消息、营销类消息这种了，
+	// 但是似乎现在看区分也没什么必要了，因为即使我消息阻塞了可以扩topic，
+	// 况且无论是哪种消息，只要channel一样，处理逻辑就是一样的
+
+	cg, err := sarama.NewConsumerGroup(mqCfg.Host, groupId, sCfg)
 	if err != nil {
 		log.Fatal("NewConsumerGroup err: ", err)
 	}

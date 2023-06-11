@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"notifyGo/internal"
 	"notifyGo/internal/model"
+	"notifyGo/pkg/mq"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -21,12 +22,12 @@ type Core struct {
 	NotifyGoDAO      model.INotifyGoDAO
 }
 
-func NewCore() *Core {
+func NewCore(mqCfg *mq.Config) *Core {
 	return &Core{
 		ContentService:   NewContentService(),
 		TargetService:    NewTargetService(),
-		SendService:      NewSendService(),
-		SendBatchService: NewSendBatchService(),
+		SendService:      NewSendService(mqCfg),
+		SendBatchService: NewSendBatchService(mqCfg),
 		// 这里是否需要自己管理连接池
 		NotifyGoDAO: model.NewINotifyGoDAO(),
 	}

@@ -1,21 +1,41 @@
 host = ["127.0.0.1:9092"]
 
 [topicMappings.sms]
-verification = "HighTopic"
-notification = "MediumTopic"
-marketing = "LowTopic"
+strategy = "round-robin"  # random: 纯随机; round-robin: 依次轮询; weight-random: 带权重随机; weight-round-robin: 带权重依次轮询
+group = "sms.group"
+# handler = "" # 是不是可以加个handler做动态加载？
+[[topicMappings.sms.topic]]
+    name = "sms.high"
+    weight = 100
+[[topicMappings.sms.topic]]
+    name = "sms.medium"
+    weight = 100
+[[topicMappings.sms.topic]]
+    name = "sms.low"
+    weight = 100
 
 [topicMappings.email]
-verification = "HighTopic"
-notification = "MediumTopic"
-marketing = "LowTopic"
-
-[topicMappings.wechat]
-verification = "HighTopic"
-notification = "MediumTopic"
-marketing = "LowTopic"
+strategy = "round-robin"  # random: 纯随机; round-robin: 依次轮询; weight-random: 带权重随机; weight-round-robin: 带权重依次轮询
+group = "email.group"
+[[topicMappings.email.topic]]
+    name = "email.high"
+    weight = 100
+[[topicMappings.email.topic]]
+    name = "email.medium"
+    weight = 100
+[[topicMappings.email.topic]]
+    name = "email.low"
+    weight = 100
 
 [topicMappings.push]
-verification = "HighTopic"
-notification = "MediumTopic"
-marketing = "LowTopic"
+strategy = "round-robin"  # random: 纯随机; round-robin: 依次轮询; weight-random: 带权重随机; weight-round-robin: 带权重依次轮询
+group = "push.group"
+[[topicMappings.push.topic]]
+    name = "push.high"
+    weight = 100
+[[topicMappings.push.topic]]
+    name = "push.medium"
+    weight = 100
+[[topicMappings.push.topic]]
+    name = "push.low"
+    weight = 100

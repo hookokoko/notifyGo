@@ -11,10 +11,9 @@ type SendService struct {
 	producer *mq.Producer
 }
 
-func NewSendService() *SendService {
-	cfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
+func NewSendService(mqCfg *mq.Config) *SendService {
 	return &SendService{
-		producer: mq.NewProducer(cfg),
+		producer: mq.NewProducer(mqCfg),
 	}
 }
 
@@ -25,9 +24,6 @@ func (ss *SendService) Process(_ context.Context, task internal.Task) error {
 		return err
 	}
 
-	msgType := task.MsgContent.Type
-	channel := task.SendChannel
-
-	ss.producer.Send(channel, msgType, taskBytes)
+	ss.producer.Send(task.SendChannel, taskBytes)
 	return nil
 }

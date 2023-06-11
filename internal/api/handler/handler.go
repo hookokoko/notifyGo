@@ -5,16 +5,21 @@ import (
 	"net/http"
 	"notifyGo/internal"
 	"notifyGo/internal/service"
+	"notifyGo/pkg/mq"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 type PushHandler struct {
+	core *service.Core
 }
 
-func NewPushHandler() *PushHandler {
-	return &PushHandler{}
+func NewPushHandler(mqCfg *mq.Config) *PushHandler {
+	c := service.NewCore(mqCfg)
+	return &PushHandler{
+		core: c,
+	}
 }
 
 func (p *PushHandler) SendBatch(ctx *gin.Context) {
@@ -27,7 +32,6 @@ func (p *PushHandler) Send(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, "绑定参数出错")
 	}
-	c := service.NewCore()
 
 	channel := params["channel"].(string)
 
@@ -65,7 +69,7 @@ func (p *PushHandler) Send(ctx *gin.Context) {
 	templateIdStr := params["templateId"].(string)
 	templateId, _ := strconv.ParseInt(templateIdStr, 10, 64)
 	msgType := params["msgType"].(string)
-	err = c.Send(context.TODO(), channel, msgType, target, templateId, map[string]interface{}{})
+	err = p.core.Send(context.TODO(), channel, msgType, target, templateId, map[string]interface{}{})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, "消息处理处理失败")
 		return

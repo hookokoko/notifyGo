@@ -11,10 +11,9 @@ type SendBatchService struct {
 	producer *mq.Producer
 }
 
-func NewSendBatchService() *SendBatchService {
-	cfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
+func NewSendBatchService(mqCfg *mq.Config) *SendBatchService {
 	return &SendBatchService{
-		producer: mq.NewProducer(cfg),
+		producer: mq.NewProducer(mqCfg),
 	}
 }
 
@@ -30,7 +29,7 @@ func (ss *SendBatchService) Process(_ context.Context, tasks []internal.Task) er
 		}
 
 		// topic的选择要抽象出来
-		ss.producer.Send("sms", "business", taskBytes)
+		ss.producer.Send("sms", taskBytes)
 	}
 
 	return nil

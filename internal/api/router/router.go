@@ -2,6 +2,7 @@ package router
 
 import (
 	"notifyGo/internal/api/handler"
+	"notifyGo/pkg/mq"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,8 +11,8 @@ type MsgPusher struct {
 	PushHandler *handler.PushHandler
 }
 
-func NewMsgPusher() *MsgPusher {
-	return &MsgPusher{PushHandler: handler.NewPushHandler()}
+func NewMsgPusher(mqCfg *mq.Config) *MsgPusher {
+	return &MsgPusher{PushHandler: handler.NewPushHandler(mqCfg)}
 }
 
 func (m *MsgPusher) GetRouter() *gin.Engine {

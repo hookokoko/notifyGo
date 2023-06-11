@@ -24,6 +24,19 @@ func NewProducer(mqCfg *Config) *Producer {
 		tbMappings[channel] = bala
 	}
 
+	go func() {
+		for {
+			mu.Lock()
+			changeSignal.Wait()
+			log.Println("producer update topics")
+			for channel, topics := range mqCfg.TopicMappings {
+				bala := NewBalanceBuilder(channel, topics.Topics).Build(topics.Strategy)
+				tbMappings[channel] = bala
+			}
+			mu.Unlock()
+		}
+	}()
+
 	return &Producer{
 		hosts:                mqCfg.Host,
 		topicBalanceMappings: tbMappings,

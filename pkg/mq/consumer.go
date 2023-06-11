@@ -37,6 +37,16 @@ func NewConsumerGroup(mqCfg *Config, channel string, handler sarama.ConsumerGrou
 		log.Fatal("NewConsumerGroup err: ", err)
 	}
 
+	go func() {
+		for {
+			mu.Lock()
+			changeSignal.Wait()
+			topics = mqCfg.GetTopicsByChannel(channel)
+			log.Println("consumer update topics, ", topics)
+			mu.Unlock()
+		}
+	}()
+
 	return &ConsumerGroup{
 		handler: handler,
 		sCg:     cg,

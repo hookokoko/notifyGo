@@ -2,9 +2,16 @@ package mq
 
 import (
 	"log"
+	"path/filepath"
+	"sync"
 
 	"github.com/BurntSushi/toml"
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
 )
+
+var changeSignal *sync.Cond
+var mu *sync.Mutex
 
 type Topic struct {
 	Name   string `toml:"name"`
@@ -28,8 +35,35 @@ func NewConfig(path string) *Config {
 	if err != nil {
 		log.Fatal("初始化Mq失败", err)
 	}
-
+	mu = &sync.Mutex{}
+	changeSignal = sync.NewCond(mu)
+	// 监控文件变化，热加载
+	conf.watch(path)
 	return conf
+}
+
+func (c *Config) watch(path string) {
+	dir := filepath.Dir(path)
+	file := filepath.Base(path)
+	ext := filepath.Ext(path)
+
+	viper.SetConfigName(file[:len(file)-len(ext)])
+	viper.SetConfigType(ext[1:])
+	viper.AddConfigPath(dir)
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		defer func() { mu.Unlock() }()
+		mu.Lock()
+		changeSignal.Broadcast()
+		c.reload(path)
+	})
+}
+
+func (c *Config) reload(path string) {
+	_, err := toml.DecodeFile(path, c)
+	if err != nil {
+		log.Fatal("重新加载Mq配置失败", err)
+	}
 }
 
 func (c *Config) GetTopicsByChannel(channel string) []string {
@@ -57,8 +91,4 @@ func (c *Config) GetGroupIdByChannel(channel string) string {
 		return ""
 	}
 	return topicCfg.Group
-}
-
-func reload() error {
-	return nil
 }

@@ -1,0 +1,40 @@
+version: '3'
+services:
+  zookeeper:
+    image: zookeeper:latest
+    container_name: zookeeper
+    networks:
+      - my-network
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    container_name: kafka
+    environment:
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://docker.for.mac.host.internal:29092
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
+    depends_on:
+      - zookeeper
+    networks:
+      - my-network
+    ports:
+      - "29092:9092"
+
+#  kafka-manager:
+#    image: kafkamanager/kafka-manager:latest
+#    container_name: kafka-manager
+#    environment:
+#      ZK_HOSTS: "zookeeper:2181"
+#    depends_on:
+#      - kafka
+#    networks:
+#      - my-network
+#    ports:
+#      - "9000:9000"
+
+networks:
+  my-network:
+    driver: bridge

@@ -1,0 +1,22 @@
+Name = "test"
+
+ConnTimeOut = 1500
+WriteTimeOut = 1500
+ReadTimeOut = 1500
+
+Retry = 2
+Protocol = "https" # http / https / grpc / dubbo
+Converter = "form"  # form / json
+
+Strategy = "roundrobin" # random / round-robin / weight-random / weight-round-robin / hash
+
+[Resource.Manual]
+[[Resource.Manual.test]]
+Host = "api.github.com"
+Port = 443
+#[[Resource.Manual.test]]
+#Host = "127.0.0.2"
+#Port = 8444
+#[[Resource.Manual.test]]
+#Host = "127.0.0.3"
+#Port = 8444

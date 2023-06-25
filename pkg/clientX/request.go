@@ -63,6 +63,10 @@ func (h *HttpProtocol) Result() any {
 }
 
 func Go(ctx context.Context, srvName string, request any, result any) error {
+	// newLogRecord, 将record塞到context里？
+	l := NewLogRecord()
+	defer l.Flush()
+
 	// 根据srvName获取请求类型
 	srvI, ok := ServicesMap.Load(srvName)
 	if !ok {
@@ -74,6 +78,9 @@ func Go(ctx context.Context, srvName string, request any, result any) error {
 	}
 	// 根据负载均衡策略获取请求的目标
 	to := srv.PickTarget()
+	if to == nil {
+		return fmt.Errorf("获取请求的目标为空%s\n", srvName)
+	}
 
 	var hp Protocol
 	switch typ := request.(type) {

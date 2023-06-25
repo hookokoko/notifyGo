@@ -6,8 +6,9 @@ import (
 )
 
 type (
-	Level = zapcore.Level
-	Field = zap.Field
+	Level  = zapcore.Level
+	Field  = zap.Field
+	Option = zap.Option
 )
 
 const (

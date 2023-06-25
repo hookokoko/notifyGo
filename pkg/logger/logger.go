@@ -1,8 +1,10 @@
+// Package logger Ref https://tonybai.com/2021/07/14/uber-zap-advanced-usage/
 package logger
 
 import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
 	"os"
 )
@@ -42,34 +44,84 @@ func (l *Logger) Sync() error {
 }
 
 // New create a new logger (not support log rotating).
-func New(writer io.Writer, level Level) *Logger {
+func New(writer io.Writer, level Level, opts ...Option) *Logger {
 	if writer == nil {
 		panic("the writer is nil")
 	}
-	//cfg := zap.NewProductionConfig()
+	cfg := zap.NewProductionConfig()
 	//cfg := zap.NewDevelopmentConfig()
-	encoderCfg := zapcore.EncoderConfig{
-		TimeKey:        "ts",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.MillisDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
+	//encoderCfg := zapcore.EncoderConfig{
+	//	TimeKey:        "ts",
+	//	LevelKey:       "level",
+	//	NameKey:        "logger",
+	//	CallerKey:      "caller",
+	//	FunctionKey:    zapcore.OmitKey,
+	//	MessageKey:     "msg",
+	//	StacktraceKey:  "stacktrace",
+	//	LineEnding:     zapcore.DefaultLineEnding,
+	//	EncodeLevel:    zapcore.LowercaseLevelEncoder,
+	//	EncodeTime:     zapcore.ISO8601TimeEncoder,
+	//	EncodeDuration: zapcore.MillisDurationEncoder,
+	//	EncodeCaller:   zapcore.ShortCallerEncoder,
+	//}
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	cfg.EncoderConfig.EncodeDuration = zapcore.MillisDurationEncoder
 	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderCfg),
+		zapcore.NewJSONEncoder(cfg.EncoderConfig),
 		zapcore.AddSync(writer),
 		level,
 	)
 	logger := &Logger{
 		l:     zap.New(core),
 		level: level,
+	}
+	return logger
+}
+
+type LevelEnablerFunc func(lvl Level) bool
+
+type RotateOptions struct {
+	MaxSize    int
+	MaxAge     int
+	MaxBackups int
+	Compress   bool
+}
+
+type TeeOption struct {
+	Filename string
+	Ropts    RotateOptions
+	Lef      LevelEnablerFunc
+}
+
+func NewTee(tops []TeeOption, opts ...Option) *Logger {
+	var cores []zapcore.Core
+	cfg := zap.NewProductionConfig()
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	cfg.EncoderConfig.EncodeDuration = zapcore.MillisDurationEncoder
+	for _, top := range tops {
+		top := top
+
+		// 多输出的日志级别的固定写法？
+		lv := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return top.Lef(lvl)
+		})
+
+		core := zapcore.NewCore(
+			zapcore.NewJSONEncoder(cfg.EncoderConfig),
+			zapcore.AddSync(&lumberjack.Logger{
+				Filename:   top.Filename,
+				MaxSize:    top.Ropts.MaxSize,
+				MaxBackups: top.Ropts.MaxBackups,
+				MaxAge:     top.Ropts.MaxAge,
+				Compress:   top.Ropts.Compress,
+			}),
+			lv,
+		)
+		cores = append(cores, core)
+	}
+
+	logger := &Logger{
+		l: zap.New(zapcore.NewTee(cores...), opts...),
 	}
 	return logger
 }
@@ -81,10 +133,40 @@ func New(writer io.Writer, level Level) *Logger {
 //	return nil
 //}
 
-var std = New(os.Stderr, InfoLevel)
+var (
+	std   = New(os.Stderr, InfoLevel)
+	multi = NewTee(func() []TeeOption {
+		return []TeeOption{
+			{
+				Filename: "./log/access.log",
+				Lef: func(lvl Level) bool {
+					return lvl <= FatalLevel
+				},
+				Ropts: RotateOptions{
+					MaxSize:    1,    // Mb
+					MaxAge:     2,    // 最多保留2天
+					MaxBackups: 3,    // 最多保留3个压缩文件
+					Compress:   true, // 历史文件是否压缩
+				},
+			},
+			{
+				Filename: "./log/error.log",
+				Lef: func(lvl Level) bool {
+					return lvl > InfoLevel
+				},
+				Ropts: RotateOptions{
+					MaxSize:    1,
+					MaxAge:     2,
+					MaxBackups: 3,
+					Compress:   true,
+				},
+			},
+		}
+	}())
+)
 
 func Default() *Logger {
-	return std
+	return multi
 }
 
 // ResetDefault not safe for concurrent use

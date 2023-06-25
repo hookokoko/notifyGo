@@ -78,7 +78,7 @@ func TestResty(t *testing.T) {
 		fmt.Printf("repo%d: name:%s stars:%d forks:%d\n", i+1, repo.Name, repo.StargazersCount, repo.ForksCount)
 	}
 
-	//fmt.Println("=====================================")
+	//fmt.Println("======================================")
 	//fmt.Println("Response Info:")
 	//fmt.Println("Status Code:", resp.StatusCode())
 	//fmt.Println("Status:", resp.Status())

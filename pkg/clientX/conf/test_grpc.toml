@@ -1,0 +1,21 @@
+Name = "test"
+
+TimeOut = 1500
+
+Retry = 2
+Protocol = "grpc" # http / https / grpc / dubbo
+Converter = "raw"  # form / json / raw
+
+Strategy = "roundrobin" # random / round-robin / weight-random / weight-round-robin / hash
+
+[Resource.Manual]
+[[Resource.Manual.test]]
+Host = "127.0.0.1"
+Port = "8899"
+Idc = "test"
+#[[Resource.Manual.test]]
+#Host = "127.0.0.2"
+#Port = 8444
+#[[Resource.Manual.test]]
+#Host = "127.0.0.3"
+#Port = 8444

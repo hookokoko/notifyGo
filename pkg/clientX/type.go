@@ -34,8 +34,7 @@ type ManualConfig map[string][]*Addr
 
 type Addr struct {
 	IP   string `toml:"IP,omitempty"`
-	Port int    `toml:"Port"`
+	Port string `toml:"Port,omitempty"`
 	Host string `toml:"Host,omitempty"`
-
-	IDC string
+	IDC  string `toml:"Idc,omitempty"`
 }

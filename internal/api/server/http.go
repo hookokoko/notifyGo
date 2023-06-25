@@ -7,7 +7,7 @@ import (
 )
 
 func NewServer(addr string) *http.Server {
-	mqCfg := mq.NewConfig("/Users/hooko/GolandProjects/notifyGo/config/kafka_topic.toml")
+	mqCfg := mq.NewConfig("/Users/tiger/GolandProjects/notifyGo/config/kafka_topic.toml")
 	pusher := router.NewMsgPusher(mqCfg)
 	return &http.Server{
 		Addr:    addr,

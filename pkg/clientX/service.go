@@ -107,8 +107,8 @@ func (a *Addr) GetReqDomain(isHttp bool) string {
 	if isHttp {
 		proto = "http"
 	}
-	if a.Port == 0 {
+	if a.Port == "0" {
 		return fmt.Sprintf("%s://%s", proto, a.Host)
 	}
-	return fmt.Sprintf("%s://%s:%d", proto, a.Host, a.Port)
+	return fmt.Sprintf("%s://%s:%s", proto, a.Host, a.Port)
 }

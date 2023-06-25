@@ -13,7 +13,8 @@ Strategy = "roundrobin" # random / round-robin / weight-random / weight-round-ro
 [Resource.Manual]
 [[Resource.Manual.test]]
 Host = "api.github.com"
-Port = 443
+Port = "443"
+Idc = "test"
 #[[Resource.Manual.test]]
 #Host = "127.0.0.2"
 #Port = 8444

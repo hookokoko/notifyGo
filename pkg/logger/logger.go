@@ -2,11 +2,12 @@
 package logger
 
 import (
+	"io"
+	"os"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"io"
-	"os"
 )
 
 type Logger struct {
@@ -49,21 +50,6 @@ func New(writer io.Writer, level Level, opts ...Option) *Logger {
 		panic("the writer is nil")
 	}
 	cfg := zap.NewProductionConfig()
-	//cfg := zap.NewDevelopmentConfig()
-	//encoderCfg := zapcore.EncoderConfig{
-	//	TimeKey:        "ts",
-	//	LevelKey:       "level",
-	//	NameKey:        "logger",
-	//	CallerKey:      "caller",
-	//	FunctionKey:    zapcore.OmitKey,
-	//	MessageKey:     "msg",
-	//	StacktraceKey:  "stacktrace",
-	//	LineEnding:     zapcore.DefaultLineEnding,
-	//	EncodeLevel:    zapcore.LowercaseLevelEncoder,
-	//	EncodeTime:     zapcore.ISO8601TimeEncoder,
-	//	EncodeDuration: zapcore.MillisDurationEncoder,
-	//	EncodeCaller:   zapcore.ShortCallerEncoder,
-	//}
 	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	cfg.EncoderConfig.EncodeDuration = zapcore.MillisDurationEncoder
 	core := zapcore.NewCore(

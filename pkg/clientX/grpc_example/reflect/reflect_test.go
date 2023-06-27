@@ -179,7 +179,15 @@ func main() {
 	if err != nil {
 		return
 	}
-	resp.ProtoMessage()
+	res, ok := resp.(*dynamic.Message)
+	if ok {
+		ps := &helloworld.HelloReply{}
+		err := res.ConvertTo(ps)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(ps)
+	}
 	fmt.Printf("%+v\n", resp)
 }
 

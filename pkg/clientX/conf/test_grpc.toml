@@ -1,4 +1,4 @@
-Name = "test"
+Name = "test_grpc"
 
 TimeOut = 1500
 
@@ -11,7 +11,7 @@ Strategy = "roundrobin" # random / round-robin / weight-random / weight-round-ro
 [Resource.Manual]
 [[Resource.Manual.test]]
 Host = "127.0.0.1"
-Port = "8899"
+Port = "50051"
 Idc = "test"
 #[[Resource.Manual.test]]
 #Host = "127.0.0.2"

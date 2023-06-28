@@ -13,7 +13,7 @@ import (
 
 var ServicesMap sync.Map
 
-func NewServices(idc string) error {
+func InitServices(idc string) error {
 	// 读conf目录下的所有文件
 	tomlFilesPath, err := getTomlFile("conf")
 	if err != nil {
@@ -102,7 +102,7 @@ func buildBalancer(srv *Service) error {
 	return nil
 }
 
-func (a *Addr) GetReqDomain(isHttp bool) string {
+func (a *Addr) GetHttpReqDomain(isHttp bool) string {
 	proto := "https"
 	if isHttp {
 		proto = "http"
@@ -111,4 +111,8 @@ func (a *Addr) GetReqDomain(isHttp bool) string {
 		return fmt.Sprintf("%s://%s", proto, a.Host)
 	}
 	return fmt.Sprintf("%s://%s:%s", proto, a.Host, a.Port)
+}
+
+func (a *Addr) GetGrpcReqDomain() string {
+	return fmt.Sprintf("%s:%s", a.Host, a.Port)
 }

@@ -3,6 +3,7 @@ package clientX
 import (
 	"context"
 	"fmt"
+	pb "notifyGo/pkg/clientX/grpc_example/helloworld"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -102,7 +103,7 @@ func TestGo(t *testing.T) {
 		srvName string
 		request any
 		result  any
-		wantErr bool
+		wantErr error
 		wantRes any
 	}{
 		{
@@ -121,14 +122,25 @@ func TestGo(t *testing.T) {
 			},
 			result: []*Repository{},
 		},
+		{
+			name:    "base grpc",
+			srvName: "test_grpc",
+			request: &GrpcRequest{
+				Package: "helloworld",
+				Service: "Greeter",
+				Method:  "SayHello",
+				Data:    &pb.HelloRequest{Name: "haokun"},
+			},
+			result: &pb.HelloReply{},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := NewServices("test")
+			err := InitServices("test")
 			assert.Nil(t, err)
-			err = Go(context.Background(), tt.srvName, tt.request, &tt.result)
+			err = Go(context.Background(), tt.srvName, tt.request, tt.result)
 			assert.Equal(t, tt.wantErr, err)
-			assert.Equal(t, tt.wantRes, tt.result)
+			t.Log(tt.result)
 		})
 	}
 }

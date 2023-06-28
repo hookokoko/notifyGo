@@ -2,6 +2,7 @@ package clientX
 
 import (
 	"context"
+
 	"github.com/go-resty/resty/v2"
 )
 
@@ -41,7 +42,7 @@ func (h *HttpProtocol) Do(ctx context.Context, to *Addr) error {
 	if !ok {
 	}
 
-	h.restyClient.SetBaseURL(to.GetReqDomain(h.isHTTP) + h.originRequest.Path)
+	h.restyClient.SetBaseURL(to.GetHttpReqDomain(h.isHTTP) + h.originRequest.Path)
 
 	rr := h.restyClient.NewRequest().
 		SetContext(ctx).

@@ -37,6 +37,7 @@ func (g *GrpcProtocol) Do(ctx context.Context, to *Addr) error {
 	if !ok {
 	}
 
+	// TODO 鉴权
 	conn, _ := grpc.Dial(to.GetGrpcReqDomain(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	in := g.grpcReq.Data
@@ -46,7 +47,9 @@ func (g *GrpcProtocol) Do(ctx context.Context, to *Addr) error {
 	fullMethodName := fmt.Sprintf("/%s.%s/%s", g.grpcReq.Package, g.grpcReq.Service, g.grpcReq.Method)
 	logRecord.Path = fullMethodName
 
+	logRecord.PointStart("rpc_cost")
 	err := conn.Invoke(ctx, fullMethodName, in, out)
+	logRecord.PointStop("rpc_cost")
 	if err != nil {
 		return err
 	}

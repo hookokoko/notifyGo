@@ -26,6 +26,7 @@ import (
 	"log"
 	"net"
 	"testing"
+	"time"
 
 	pb "notifyGo/pkg/clientX/grpc_example/helloworld"
 
@@ -44,6 +45,7 @@ type server struct {
 // SayHello implements helloworld.GreeterServer
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
 	log.Printf("Received: %v", in.GetName())
+	time.Sleep(200 * time.Millisecond)
 	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
 }
 

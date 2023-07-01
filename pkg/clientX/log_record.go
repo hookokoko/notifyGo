@@ -82,7 +82,7 @@ func (lr *LogRecord) Flush() {
 	// 3. 获取trace的字段
 	// 基本功能实现了，总感觉不是很优雅
 	field := make([]logger.Field, 0, len(lr.timeCostStatics)+7)
-	field = append(field, logger.Int("status", lr.RspCode))
+	field = append(field, logger.Int("code", lr.RspCode))
 	field = append(field, logger.String("path", lr.Path))
 	field = append(field, logger.String("idc", lr.IDC))
 	field = append(field, logger.String("ipport", lr.IPPort))
